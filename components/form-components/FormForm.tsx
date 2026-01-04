@@ -10,13 +10,20 @@ interface FormFormProps {
 }
 
 const FormForm: React.FC<FormFormProps> = ({ component }) => {
-  const { selectComponent, selectedComponentId } = useFormBuilderStore();
+  const { selectComponent, selectedComponentId, formMode, components, findComponent } = useFormBuilderStore();
   const isSelected = selectedComponentId === component.id;
+  
+  // Get latest component from store to ensure real-time updates
+  const latestComponent = React.useMemo(() => {
+    return findComponent(component.id) || component;
+  }, [component.id, components, findComponent]);
+  
   const { setNodeRef, isOver } = useDroppable({
-    id: component.id,
+    id: latestComponent.id,
     data: {
       accepts: ['component'],
     },
+    disabled: formMode,
   });
 
   return (
@@ -24,25 +31,27 @@ const FormForm: React.FC<FormFormProps> = ({ component }) => {
       ref={setNodeRef}
       component="form"
       onClick={(e) => {
-        e.stopPropagation();
-        selectComponent(component.id);
+        if (!formMode) {
+          e.stopPropagation();
+          selectComponent(component.id);
+        }
       }}
       sx={{
-        border: isSelected
+        border: isSelected && !formMode
           ? '2px solid #1976d2'
-          : isOver
+          : isOver && !formMode
           ? '2px dashed #1976d2'
           : '2px solid transparent',
         borderRadius: 1,
         p: 2,
-        cursor: 'pointer',
+        cursor: formMode ? 'default' : 'pointer',
         minHeight: 100,
-        bgcolor: isOver ? 'action.hover' : 'background.paper',
+        bgcolor: isOver && !formMode ? 'action.hover' : 'background.paper',
         position: 'relative',
       }}
     >
-      {component.children && component.children.length > 0 ? (
-        component.children.map((child) => (
+      {latestComponent.children && latestComponent.children.length > 0 ? (
+        latestComponent.children.map((child) => (
           <DraggableComponent key={child.id} component={child} />
         ))
       ) : (

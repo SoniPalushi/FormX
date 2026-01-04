@@ -371,7 +371,16 @@ export async function importFormFromJSON(jsonString: string): Promise<ComponentD
 export function exportAsPersistedForm(
   components: ComponentDefinition[],
   options: {
-    version?: string;
+    version?: string; // Schema version
+    id?: string; // Form ID
+    metadata?: {
+      formName?: string;
+      description?: string;
+      author?: string;
+      formVersion?: string; // Form revision version
+      tags?: string[];
+      category?: string;
+    };
     defaultLanguage?: string;
     languages?: Array<{ code: string; name: string }>;
     formValidator?: string;

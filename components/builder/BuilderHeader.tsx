@@ -67,8 +67,15 @@ const BuilderHeader: React.FC = () => {
           components,
           `${metadata.formName.replace(/[^a-z0-9]/gi, '-').toLowerCase()}.json`,
           {
-            defaultLanguage: 'en-US',
+            metadata: {
+              formName: metadata.formName,
+              description: metadata.description,
+              author: metadata.author,
+              formVersion: '1.0', // Initial version
+            },
+            defaultLanguage: 'al', // Albanian as default
             languages: [
+              { code: 'al', name: 'Albanian' },
               { code: 'en-US', name: 'English (US)' },
               { code: 'es-ES', name: 'Spanish (ES)' },
             ],

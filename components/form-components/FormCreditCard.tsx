@@ -9,8 +9,13 @@ interface FormCreditCardProps {
 }
 
 const FormCreditCard: React.FC<FormCreditCardProps> = ({ component }) => {
-  const { selectComponent, selectedComponentId, formMode } = useFormBuilderStore();
+  const { selectComponent, selectedComponentId, formMode, components, findComponent } = useFormBuilderStore();
   const isSelected = selectedComponentId === component.id;
+  
+  // Get latest component from store to ensure real-time updates
+  const latestComponent = React.useMemo(() => {
+    return findComponent(component.id) || component;
+  }, [component.id, components, findComponent]);
   
   const {
     responsiveSx,
@@ -20,20 +25,20 @@ const FormCreditCard: React.FC<FormCreditCardProps> = ({ component }) => {
     shouldRender,
     handleClick,
     htmlAttributes,
-  } = useFormComponent({ component, formMode });
+  } = useFormComponent({ component: latestComponent, formMode });
   
-  const variant = component.props?.variant || 'outlined';
-  const fullWidth = component.props?.fullWidth !== false;
-  const disabled = component.props?.disabled || false;
-  const size = component.props?.size || 'medium';
-  const margin = component.props?.margin;
-  const padding = component.props?.padding;
-  const classes = component.props?.classes || component.props?.className || [];
+  const variant = latestComponent.props?.variant || 'outlined';
+  const fullWidth = latestComponent.props?.fullWidth !== false;
+  const disabled = latestComponent.props?.disabled || false;
+  const size = latestComponent.props?.size || 'medium';
+  const margin = latestComponent.props?.margin;
+  const padding = latestComponent.props?.padding;
+  const classes = latestComponent.props?.classes || latestComponent.props?.className || [];
   
-  const cardNumber = component.props?.cardNumber || component.props?.number || '';
-  const cardHolder = component.props?.cardHolder || component.props?.holder || '';
-  const expiryDate = component.props?.expiryDate || component.props?.expiry || '';
-  const cvv = component.props?.cvv || component.props?.cvc || '';
+  const cardNumber = latestComponent.props?.cardNumber || latestComponent.props?.number || '';
+  const cardHolder = latestComponent.props?.cardHolder || latestComponent.props?.holder || '';
+  const expiryDate = latestComponent.props?.expiryDate || latestComponent.props?.expiry || '';
+  const cvv = latestComponent.props?.cvv || latestComponent.props?.cvc || '';
 
   if (!shouldRender) return null;
 

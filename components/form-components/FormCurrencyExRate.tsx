@@ -9,8 +9,13 @@ interface FormCurrencyExRateProps {
 }
 
 const FormCurrencyExRate: React.FC<FormCurrencyExRateProps> = ({ component }) => {
-  const { selectComponent, selectedComponentId, formMode } = useFormBuilderStore();
+  const { selectComponent, selectedComponentId, formMode, components, findComponent } = useFormBuilderStore();
   const isSelected = selectedComponentId === component.id;
+  
+  // Get latest component from store to ensure real-time updates
+  const latestComponent = React.useMemo(() => {
+    return findComponent(component.id) || component;
+  }, [component.id, components, findComponent]);
   
   const {
     computedLabel,
@@ -30,20 +35,20 @@ const FormCurrencyExRate: React.FC<FormCurrencyExRateProps> = ({ component }) =>
     handleFocus,
     handleBlur,
     htmlAttributes,
-  } = useFormComponent({ component, formMode });
+  } = useFormComponent({ component: latestComponent, formMode });
   
-  const fromCurrency = component.props?.fromCurrency || 'USD';
-  const toCurrency = component.props?.toCurrency || 'EUR';
-  const exchangeRate = component.props?.exchangeRate || component.props?.rate || 1;
-  const amount = component.props?.amount || component.props?.value || 0;
-  const variant = component.props?.variant || 'outlined';
-  const fullWidth = component.props?.fullWidth !== false;
-  const disabled = component.props?.disabled || false;
-  const size = component.props?.size || 'medium';
-  const margin = component.props?.margin;
-  const padding = component.props?.padding;
-  const width = component.props?.width;
-  const classes = component.props?.classes || component.props?.className || [];
+  const fromCurrency = latestComponent.props?.fromCurrency || 'USD';
+  const toCurrency = latestComponent.props?.toCurrency || 'EUR';
+  const exchangeRate = latestComponent.props?.exchangeRate || latestComponent.props?.rate || 1;
+  const amount = latestComponent.props?.amount || latestComponent.props?.value || 0;
+  const variant = latestComponent.props?.variant || 'outlined';
+  const fullWidth = latestComponent.props?.fullWidth !== false;
+  const disabled = latestComponent.props?.disabled || false;
+  const size = latestComponent.props?.size || 'medium';
+  const margin = latestComponent.props?.margin;
+  const padding = latestComponent.props?.padding;
+  const width = latestComponent.props?.width;
+  const classes = latestComponent.props?.classes || latestComponent.props?.className || [];
   
   const calculatedWidth = width || (fullWidth ? '100%' : 'auto');
   const displayValue = formMode ? boundValue : computedValue;

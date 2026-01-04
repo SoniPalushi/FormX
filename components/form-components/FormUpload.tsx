@@ -9,25 +9,33 @@ interface FormUploadProps {
 }
 
 const FormUpload: React.FC<FormUploadProps> = ({ component }) => {
-  const { selectComponent, selectedComponentId } = useFormBuilderStore();
+  const { selectComponent, selectedComponentId, formMode, components, findComponent } = useFormBuilderStore();
   const isSelected = selectedComponentId === component.id;
-  const label = component.props?.label || 'Upload File';
-  const accept = component.props?.accept || '*/*';
-  const multiple = component.props?.multiple || false;
-  const variant = component.props?.variant || 'outlined';
-  const fullWidth = component.props?.fullWidth !== false;
+  
+  // Get latest component from store to ensure real-time updates
+  const latestComponent = React.useMemo(() => {
+    return findComponent(component.id) || component;
+  }, [component.id, components, findComponent]);
+  
+  const label = latestComponent.props?.label || 'Upload File';
+  const accept = latestComponent.props?.accept || '*/*';
+  const multiple = latestComponent.props?.multiple || false;
+  const variant = latestComponent.props?.variant || 'outlined';
+  const fullWidth = latestComponent.props?.fullWidth !== false;
 
   return (
     <Box
       onClick={(e) => {
-        e.stopPropagation();
-        selectComponent(component.id);
+        if (!formMode) {
+          e.stopPropagation();
+          selectComponent(component.id);
+        }
       }}
       sx={{
-        border: isSelected ? '2px solid #1976d2' : '2px solid transparent',
+        border: isSelected && !formMode ? '2px solid #1976d2' : '2px solid transparent',
         borderRadius: 1,
-        p: 0.5,
-        cursor: 'pointer',
+        p: formMode ? 0 : 0.5,
+        cursor: formMode ? 'default' : 'pointer',
         width: fullWidth ? '100%' : 'auto',
       }}
     >

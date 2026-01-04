@@ -10,8 +10,13 @@ interface FormMapLocationPickerProps {
 }
 
 const FormMapLocationPicker: React.FC<FormMapLocationPickerProps> = ({ component }) => {
-  const { selectComponent, selectedComponentId, formMode } = useFormBuilderStore();
+  const { selectComponent, selectedComponentId, formMode, components, findComponent } = useFormBuilderStore();
   const isSelected = selectedComponentId === component.id;
+  
+  // Get latest component from store to ensure real-time updates
+  const latestComponent = React.useMemo(() => {
+    return findComponent(component.id) || component;
+  }, [component.id, components, findComponent]);
   
   const {
     computedLabel,
@@ -29,25 +34,33 @@ const FormMapLocationPicker: React.FC<FormMapLocationPickerProps> = ({ component
     handleChange,
     handleClick,
     htmlAttributes,
-  } = useFormComponent({ component, formMode });
+  } = useFormComponent({ component: latestComponent, formMode });
   
-  const variant = component.props?.variant || 'outlined';
-  const fullWidth = component.props?.fullWidth !== false;
-  const disabled = component.props?.disabled || false;
-  const size = component.props?.size || 'medium';
-  const margin = component.props?.margin;
-  const padding = component.props?.padding;
-  const width = component.props?.width;
-  const classes = component.props?.classes || component.props?.className || [];
-  const apiKey = component.props?.apiKey || component.props?.mapApiKey || '';
+  const variant = latestComponent.props?.variant || 'outlined';
+  const fullWidth = latestComponent.props?.fullWidth !== false;
+  const disabled = latestComponent.props?.disabled || false;
+  const size = latestComponent.props?.size || 'medium';
+  const margin = latestComponent.props?.margin;
+  const padding = latestComponent.props?.padding;
+  const width = latestComponent.props?.width;
+  const classes = latestComponent.props?.classes || latestComponent.props?.className || [];
+  const apiKey = latestComponent.props?.apiKey || latestComponent.props?.mapApiKey || '';
   
   const calculatedWidth = width || (fullWidth ? '100%' : 'auto');
   const displayValue = formMode ? boundValue : computedValue;
   const displayHelperText = validationError || computedHelperText || '';
   const hasError = !!validationError || !isValid;
   
-  const [latitude, setLatitude] = useState(component.props?.latitude || component.props?.lat || '');
-  const [longitude, setLongitude] = useState(component.props?.longitude || component.props?.lng || '');
+  const [latitude, setLatitude] = useState(latestComponent.props?.latitude || latestComponent.props?.lat || '');
+  const [longitude, setLongitude] = useState(latestComponent.props?.longitude || latestComponent.props?.lng || '');
+  
+  // Update state when props change
+  React.useEffect(() => {
+    const newLat = latestComponent.props?.latitude || latestComponent.props?.lat || '';
+    const newLng = latestComponent.props?.longitude || latestComponent.props?.lng || '';
+    if (newLat !== latitude) setLatitude(newLat);
+    if (newLng !== longitude) setLongitude(newLng);
+  }, [latestComponent.props?.latitude, latestComponent.props?.lat, latestComponent.props?.longitude, latestComponent.props?.lng, latitude, longitude]);
 
   if (!shouldRender) return null;
 

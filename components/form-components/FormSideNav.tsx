@@ -10,30 +10,39 @@ interface FormSideNavProps {
 }
 
 const FormSideNav: React.FC<FormSideNavProps> = ({ component }) => {
-  const { selectComponent, selectedComponentId } = useFormBuilderStore();
+  const { selectComponent, selectedComponentId, formMode, components, findComponent } = useFormBuilderStore();
   const isSelected = selectedComponentId === component.id;
+  
+  // Get latest component from store to ensure real-time updates
+  const latestComponent = React.useMemo(() => {
+    return findComponent(component.id) || component;
+  }, [component.id, components, findComponent]);
+  
   const { setNodeRef, isOver } = useDroppable({
-    id: component.id,
+    id: latestComponent.id,
     data: {
       accepts: ['component'],
     },
+    disabled: formMode,
   });
 
-  const width = component.props?.width || 240;
-  const variant = component.props?.variant || 'permanent';
-  const anchor = component.props?.anchor || 'left';
+  const width = latestComponent.props?.width || 240;
+  const variant = latestComponent.props?.variant || 'permanent';
+  const anchor = latestComponent.props?.anchor || 'left';
 
   return (
     <Box
       ref={setNodeRef}
       onClick={(e) => {
-        e.stopPropagation();
-        selectComponent(component.id);
+        if (!formMode) {
+          e.stopPropagation();
+          selectComponent(component.id);
+        }
       }}
       sx={{
-        border: isSelected
+        border: isSelected && !formMode
           ? '2px solid #1976d2'
-          : isOver
+          : isOver && !formMode
           ? '2px dashed #1976d2'
           : '2px solid transparent',
         borderRadius: 1,
@@ -60,9 +69,9 @@ const FormSideNav: React.FC<FormSideNavProps> = ({ component }) => {
           },
         }}
       >
-        {component.children && component.children.length > 0 ? (
+        {latestComponent.children && latestComponent.children.length > 0 ? (
           <Box sx={{ p: 2 }}>
-            {component.children.map((child) => (
+            {latestComponent.children.map((child) => (
               <DraggableComponent key={child.id} component={child} />
             ))}
           </Box>

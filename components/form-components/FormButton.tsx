@@ -9,8 +9,13 @@ interface FormButtonProps {
 }
 
 const FormButton: React.FC<FormButtonProps> = ({ component }) => {
-  const { selectComponent, selectedComponentId, formMode } = useFormBuilderStore();
+  const { selectComponent, selectedComponentId, formMode, components, findComponent } = useFormBuilderStore();
   const isSelected = selectedComponentId === component.id;
+  
+  // Get latest component from store to ensure real-time updates
+  const latestComponent = React.useMemo(() => {
+    return findComponent(component.id) || component;
+  }, [component.id, components, findComponent]);
   
   const {
     computedLabel,
@@ -21,14 +26,14 @@ const FormButton: React.FC<FormButtonProps> = ({ component }) => {
     shouldRender,
     handleClick,
     htmlAttributes,
-  } = useFormComponent({ component, formMode });
+  } = useFormComponent({ component: latestComponent, formMode });
   
-  const variant = component.props?.variant || 'contained';
-  const color = component.props?.color || 'primary';
-  const width = component.props?.width;
-  const margin = component.props?.margin;
-  const padding = component.props?.padding;
-  const classes = component.props?.classes || component.props?.className || [];
+  const variant = latestComponent.props?.variant || 'contained';
+  const color = latestComponent.props?.color || 'primary';
+  const width = latestComponent.props?.width;
+  const margin = latestComponent.props?.margin;
+  const padding = latestComponent.props?.padding;
+  const classes = latestComponent.props?.classes || latestComponent.props?.className || [];
 
   if (!shouldRender) return null;
 
@@ -71,7 +76,7 @@ const FormButton: React.FC<FormButtonProps> = ({ component }) => {
         style={responsiveCss ? { style: responsiveCss } : undefined}
         {...htmlAttributes}
       >
-        {computedLabel || component.props?.label || component.props?.text || 'Button'}
+        {computedLabel || latestComponent.props?.label || latestComponent.props?.text || 'Button'}
       </Button>
     </Box>
   );

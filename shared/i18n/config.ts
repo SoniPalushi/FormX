@@ -4,12 +4,16 @@ import LanguageDetector from 'i18next-browser-languagedetector';
 
 import enTranslations from '../locales/en.json';
 import esTranslations from '../locales/es.json';
+import alTranslations from '../locales/al.json';
 
 i18n
   .use(LanguageDetector)
   .use(initReactI18next)
   .init({
     resources: {
+      al: {
+        translation: alTranslations,
+      },
       en: {
         translation: enTranslations,
       },
@@ -17,7 +21,8 @@ i18n
         translation: esTranslations,
       },
     },
-    fallbackLng: 'en',
+    fallbackLng: 'al',
+    lng: 'al',
     interpolation: {
       escapeValue: false,
     },

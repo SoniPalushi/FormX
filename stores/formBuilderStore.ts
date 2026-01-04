@@ -10,6 +10,7 @@ interface FormBuilderStore extends FormBuilderState {
   selectComponent: (id: string | null) => void;
   setActiveContainer: (id: string | null) => void;
   toggleFormMode: () => void;
+  setFormMode: (mode: boolean) => void;
   setPreviewMode: (mode: 'desktop' | 'tablet' | 'mobile' | null) => void;
   duplicateComponent: (id: string) => void;
   moveComponent: (id: string, newParentId: string | null, newIndex?: number) => void;
@@ -179,6 +180,8 @@ export const useFormBuilderStore = create<FormBuilderStore>((set, get) => ({
   
   toggleFormMode: () =>
     set((state) => ({ formMode: !state.formMode })),
+  
+  setFormMode: (mode) => set({ formMode: mode }),
   
   setPreviewMode: (mode) => set({ previewMode: mode }),
   

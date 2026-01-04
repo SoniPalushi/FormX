@@ -2136,9 +2136,9 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
   };
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'auto' }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       {/* Header */}
-      <Box sx={{ p: 1.5, borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}>
+      <Box sx={{ p: 1.5, borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'background.paper', flexShrink: 0 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
           <Typography variant="subtitle1" sx={{ fontSize: '0.9rem', fontWeight: 600, color: 'primary.main' }}>
             {componentWithProps.type}
@@ -2186,7 +2186,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
       </Box>
 
       {/* Properties */}
-      <Box sx={{ flex: 1, overflow: 'auto', p: 1.5, bgcolor: 'background.default' }}>
+      <Box sx={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', p: 1.5, bgcolor: 'background.default', minHeight: 0 }}>
         <Typography variant="overline" sx={{ display: 'block', mb: 0.75, fontSize: '0.7rem', color: 'text.secondary', fontWeight: 600 }}>
           Properties
         </Typography>

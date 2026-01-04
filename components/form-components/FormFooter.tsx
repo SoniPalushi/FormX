@@ -10,30 +10,39 @@ interface FormFooterProps {
 }
 
 const FormFooter: React.FC<FormFooterProps> = ({ component }) => {
-  const { selectComponent, selectedComponentId } = useFormBuilderStore();
+  const { selectComponent, selectedComponentId, formMode, components, findComponent } = useFormBuilderStore();
   const isSelected = selectedComponentId === component.id;
+  
+  // Get latest component from store to ensure real-time updates
+  const latestComponent = React.useMemo(() => {
+    return findComponent(component.id) || component;
+  }, [component.id, components, findComponent]);
+  
   const { setNodeRef, isOver } = useDroppable({
-    id: component.id,
+    id: latestComponent.id,
     data: {
       accepts: ['component'],
     },
+    disabled: formMode,
   });
 
-  const text = component.props?.text || component.props?.label || 'Footer';
-  const variant = component.props?.variant || 'elevation';
-  const elevation = component.props?.elevation || 3;
+  const text = latestComponent.props?.text || latestComponent.props?.label || 'Footer';
+  const variant = latestComponent.props?.variant || 'elevation';
+  const elevation = latestComponent.props?.elevation || 3;
 
   return (
     <Box
       ref={setNodeRef}
       onClick={(e) => {
-        e.stopPropagation();
-        selectComponent(component.id);
+        if (!formMode) {
+          e.stopPropagation();
+          selectComponent(component.id);
+        }
       }}
       sx={{
-        border: isSelected
+        border: isSelected && !formMode
           ? '2px solid #1976d2'
-          : isOver
+          : isOver && !formMode
           ? '2px dashed #1976d2'
           : '2px solid transparent',
         borderRadius: 1,

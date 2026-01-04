@@ -299,7 +299,16 @@ export class FormConverter {
   static toPersistedForm(
     components: ComponentDefinition[],
     options: {
-      version?: string;
+      version?: string; // Schema version
+      id?: string; // Form ID
+      metadata?: {
+        formName?: string;
+        description?: string;
+        author?: string;
+        formVersion?: string; // Form revision version
+        tags?: string[];
+        category?: string;
+      };
       defaultLanguage?: string;
       languages?: Language[];
       formValidator?: string;
@@ -314,8 +323,21 @@ export class FormConverter {
       children: components.map((comp) => this.toComponentStore(comp, components)),
     };
 
+    const now = new Date().toISOString();
+
     return {
-      version: options.version || '1',
+      version: options.version || '1', // Schema version
+      id: options.id, // Form ID (optional, can be set by database)
+      metadata: options.metadata ? {
+        formName: options.metadata.formName || 'Untitled Form',
+        description: options.metadata.description,
+        author: options.metadata.author,
+        formVersion: options.metadata.formVersion || '1.0', // Form revision version
+        createdAt: now,
+        updatedAt: now,
+        tags: options.metadata.tags,
+        category: options.metadata.category,
+      } : undefined,
       form: formComponent,
       defaultLanguage: options.defaultLanguage || 'en-US',
       languages: options.languages || [

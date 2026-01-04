@@ -167,13 +167,27 @@ export class ActionHandler {
   }
 
   private static async openModalAction(eventArgs: ActionEventArgs, args?: Record<string, any>): Promise<void> {
-    // Open modal - would need modal system integration
-    console.log('Open modal action', eventArgs, args);
+    // Dispatch custom event to open modal
+    const modalId = args?.modalId || args?.componentId || eventArgs.component?.id;
+    const modalType = args?.modalType || eventArgs.component?.props?.modal?.type;
+    
+    window.dispatchEvent(
+      new CustomEvent('formx:openModal', {
+        detail: { modalId, modalType, args, eventArgs },
+      })
+    );
   }
 
   private static async closeModalAction(eventArgs: ActionEventArgs, args?: Record<string, any>): Promise<void> {
-    // Close modal - would need modal system integration
-    console.log('Close modal action', eventArgs, args);
+    // Dispatch custom event to close modal
+    const modalId = args?.modalId || args?.componentId || eventArgs.component?.id;
+    const modalType = args?.modalType || eventArgs.component?.props?.modal?.type;
+    
+    window.dispatchEvent(
+      new CustomEvent('formx:closeModal', {
+        detail: { modalId, modalType, args, eventArgs },
+      })
+    );
   }
 }
 

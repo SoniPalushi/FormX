@@ -18,7 +18,7 @@ interface FormWizardProps {
 }
 
 const FormWizard: React.FC<FormWizardProps> = ({ component }) => {
-  const { selectComponent, selectedComponentId } = useFormBuilderStore();
+  const { selectComponent, selectedComponentId, formMode } = useFormBuilderStore();
   const isSelected = selectedComponentId === component.id;
   const [activeStep, setActiveStep] = useState(0);
   const { setNodeRef, isOver } = useDroppable({
@@ -26,6 +26,7 @@ const FormWizard: React.FC<FormWizardProps> = ({ component }) => {
     data: {
       accepts: ['component'],
     },
+    disabled: formMode, // Disable droppable in form mode
   });
 
   const steps = component.props?.steps || ['Step 1', 'Step 2', 'Step 3'];
@@ -43,13 +44,15 @@ const FormWizard: React.FC<FormWizardProps> = ({ component }) => {
     <Box
       ref={setNodeRef}
       onClick={(e) => {
-        e.stopPropagation();
-        selectComponent(component.id);
+        if (!formMode) {
+          e.stopPropagation();
+          selectComponent(component.id);
+        }
       }}
       sx={{
-        border: isSelected
+        border: isSelected && !formMode
           ? '2px solid #1976d2'
-          : isOver
+          : isOver && !formMode
           ? '2px dashed #1976d2'
           : '2px solid transparent',
         borderRadius: 1,

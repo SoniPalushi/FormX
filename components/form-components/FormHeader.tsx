@@ -10,30 +10,39 @@ interface FormHeaderProps {
 }
 
 const FormHeader: React.FC<FormHeaderProps> = ({ component }) => {
-  const { selectComponent, selectedComponentId } = useFormBuilderStore();
+  const { selectComponent, selectedComponentId, formMode, components, findComponent } = useFormBuilderStore();
   const isSelected = selectedComponentId === component.id;
+  
+  // Get latest component from store to ensure real-time updates
+  const latestComponent = React.useMemo(() => {
+    return findComponent(component.id) || component;
+  }, [component.id, components, findComponent]);
+  
   const { setNodeRef, isOver } = useDroppable({
-    id: component.id,
+    id: latestComponent.id,
     data: {
       accepts: ['component'],
     },
+    disabled: formMode,
   });
 
-  const title = component.props?.title || component.props?.text || 'Header';
-  const position = component.props?.position || 'static';
-  const color = component.props?.color || 'primary';
+  const title = latestComponent.props?.title || latestComponent.props?.text || 'Header';
+  const position = latestComponent.props?.position || 'static';
+  const color = latestComponent.props?.color || 'primary';
 
   return (
     <Box
       ref={setNodeRef}
       onClick={(e) => {
-        e.stopPropagation();
-        selectComponent(component.id);
+        if (!formMode) {
+          e.stopPropagation();
+          selectComponent(component.id);
+        }
       }}
       sx={{
-        border: isSelected
+        border: isSelected && !formMode
           ? '2px solid #1976d2'
-          : isOver
+          : isOver && !formMode
           ? '2px dashed #1976d2'
           : '2px solid transparent',
         borderRadius: 1,

@@ -66,7 +66,7 @@ const PropertyPanel: React.FC<PropertyPanelProps> = ({ onToggle }) => {
       <Divider />
 
       {/* Property Editor */}
-      <Box sx={{ flex: 1, overflow: 'hidden' }}>
+      <Box sx={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
         {selectedComponent ? (
           <Box
             sx={{

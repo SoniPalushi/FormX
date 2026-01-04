@@ -1,0 +1,35 @@
+{
+  "common": {
+    "save": "Ruaj",
+    "cancel": "Anulo",
+    "delete": "Fshi",
+    "edit": "Redakto",
+    "preview": "Parapamje",
+    "undo": "Zhbëj",
+    "redo": "Ribëj"
+  },
+  "builder": {
+    "title": "FormX",
+    "components": "Komponentët",
+    "properties": "Vetitë",
+    "workArea": "Zona e Punës",
+    "formMode": "Modaliteti i Formularit",
+    "preview": "Parapamje",
+    "desktop": "Desktop",
+    "tablet": "Tablet",
+    "mobile": "Mobil"
+  },
+  "components": {
+    "label": "Etiketë",
+    "heading": "Titull",
+    "button": "Buton",
+    "textInput": "Fushë Teksti",
+    "textarea": "Zona e Tekstit",
+    "select": "Zgjedh",
+    "checkbox": "Kutia e Kontrollit",
+    "radiogroup": "Grupi i Radios",
+    "container": "Kontenier",
+    "form": "Formular"
+  }
+}
+

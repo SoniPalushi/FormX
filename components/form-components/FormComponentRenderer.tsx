@@ -143,6 +143,9 @@ const FormComponentRenderer: React.FC<FormComponentRendererProps> = ({ component
       return <FormRangeValidator component={component} />;
     case 'RegExValidator':
       return <FormRegExValidator component={component} />;
+    case 'Modal':
+      // Modal is rendered separately, but we can add it here if needed
+      return null;
     default:
       return (
         <div style={{ padding: '8px', border: '1px dashed #ccc', color: '#999' }}>

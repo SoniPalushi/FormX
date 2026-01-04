@@ -51,11 +51,18 @@ interface UseFormComponentReturn {
   
   // HTML attributes
   htmlAttributes: Record<string, any>;
+  
+  // Tooltip properties
+  tooltipTitle?: string;
+  tooltipPlacement?: string;
+  tooltipArrow?: boolean;
 }
 
 export function useFormComponent({ component, formMode = false }: UseFormComponentOptions): UseFormComponentReturn {
   const { findComponent } = useFormBuilderStore();
-  const { data, setData, getData, evaluateProperty } = useFormDataStore();
+  // Subscribe to data changes for reactive updates
+  const data = useFormDataStore((state) => state.data);
+  const { setData, getData, evaluateProperty } = useFormDataStore();
   
   // Get latest component
   const latestComponent = useMemo(() => {
@@ -81,38 +88,38 @@ export function useFormComponent({ component, formMode = false }: UseFormCompone
     }
   }, [formMode, disableDataBinding, dataKey, setData]);
   
-  // Computed properties
+  // Computed properties - reactive to data changes
   const computedLabel = useMemo(() => {
     const labelProp = latestComponent.props?.label;
     if (typeof labelProp === 'object' && labelProp !== null) {
       return evaluateProperty(labelProp as ComponentProperty);
     }
     return labelProp as string | undefined;
-  }, [latestComponent.props?.label, evaluateProperty]);
-  
+  }, [latestComponent.props?.label, data, evaluateProperty]); // Add data dependency
+
   const computedValue = useMemo(() => {
     const valueProp = latestComponent.props?.value;
     if (typeof valueProp === 'object' && valueProp !== null) {
       return evaluateProperty(valueProp as ComponentProperty);
     }
     return boundValue;
-  }, [latestComponent.props?.value, boundValue, evaluateProperty]);
-  
+  }, [latestComponent.props?.value, boundValue, data, evaluateProperty]); // Add data dependency
+
   const computedHelperText = useMemo(() => {
     const helperTextProp = latestComponent.props?.helperText || latestComponent.props?.helpText;
     if (typeof helperTextProp === 'object' && helperTextProp !== null) {
       return evaluateProperty(helperTextProp as ComponentProperty);
     }
     return helperTextProp as string | undefined;
-  }, [latestComponent.props?.helperText, latestComponent.props?.helpText, evaluateProperty]);
-  
+  }, [latestComponent.props?.helperText, latestComponent.props?.helpText, data, evaluateProperty]); // Add data dependency
+
   const computedPlaceholder = useMemo(() => {
     const placeholderProp = latestComponent.props?.placeholder;
     if (typeof placeholderProp === 'object' && placeholderProp !== null) {
       return evaluateProperty(placeholderProp as ComponentProperty);
     }
     return placeholderProp as string | undefined;
-  }, [latestComponent.props?.placeholder, evaluateProperty]);
+  }, [latestComponent.props?.placeholder, data, evaluateProperty]); // Add data dependency
   
   // Validation
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -187,13 +194,40 @@ export function useFormComponent({ component, formMode = false }: UseFormCompone
     return ResponsiveStyleResolver.cssToString(ResponsiveStyleResolver.getCss(wrapperCss as any, deviceType));
   }, [latestComponent.props?.wrapperCss, deviceType]);
   
-  // Conditional rendering
+  // Conditional rendering - reactive to data changes
   const shouldRender = useMemo(() => {
     const renderWhen = latestComponent.props?.renderWhen as ComponentProperty<boolean> | undefined;
     if (!renderWhen) return true;
     return ConditionalRenderer.shouldRender(renderWhen, data);
-  }, [latestComponent.props?.renderWhen, data]);
+  }, [latestComponent.props?.renderWhen, data]); // Already has data dependency
   
+  // Tooltip properties - reactive to data changes
+  const tooltipTitle = useMemo(() => {
+    const tooltipProps = latestComponent.props?.tooltipProps as Record<string, ComponentProperty> | undefined;
+    if (!tooltipProps || !tooltipProps.title) return undefined;
+    return evaluateProperty(tooltipProps.title);
+  }, [latestComponent.props?.tooltipProps, data, evaluateProperty]);
+
+  const tooltipPlacement = useMemo(() => {
+    const tooltipProps = latestComponent.props?.tooltipProps as Record<string, ComponentProperty> | undefined;
+    if (!tooltipProps || !tooltipProps.placement) return 'top';
+    const placement = tooltipProps.placement;
+    if (typeof placement === 'object' && placement !== null) {
+      return evaluateProperty(placement);
+    }
+    return placement as string;
+  }, [latestComponent.props?.tooltipProps, data, evaluateProperty]);
+
+  const tooltipArrow = useMemo(() => {
+    const tooltipProps = latestComponent.props?.tooltipProps as Record<string, ComponentProperty> | undefined;
+    if (!tooltipProps || tooltipProps.arrow === undefined) return true;
+    const arrow = tooltipProps.arrow;
+    if (typeof arrow === 'object' && arrow !== null) {
+      return evaluateProperty(arrow);
+    }
+    return arrow as boolean;
+  }, [latestComponent.props?.tooltipProps, data, evaluateProperty]);
+
   // HTML attributes
   const htmlAttributes = useMemo(() => {
     const attrs = latestComponent.props?.htmlAttributes as Array<{ key: string; value: any }> | undefined;
@@ -211,7 +245,7 @@ export function useFormComponent({ component, formMode = false }: UseFormCompone
       }
     }
     return result;
-  }, [latestComponent.props?.htmlAttributes, evaluateProperty]);
+  }, [latestComponent.props?.htmlAttributes, data, evaluateProperty]); // Add data dependency for reactive updates
   
   // Event handlers
   const handleChange = useCallback(async (value: any) => {
@@ -303,6 +337,10 @@ export function useFormComponent({ component, formMode = false }: UseFormCompone
     handleFocus,
     handleBlur,
     htmlAttributes,
+    // Tooltip properties
+    tooltipTitle,
+    tooltipPlacement,
+    tooltipArrow,
   };
 }
 

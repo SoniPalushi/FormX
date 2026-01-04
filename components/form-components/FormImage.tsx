@@ -2,30 +2,42 @@ import React from 'react';
 import { Box, CardMedia } from '@mui/material';
 import type { ComponentDefinition } from '../../stores/types';
 import { useFormBuilderStore } from '../../stores/formBuilderStore';
+import { useFormComponent } from '../../hooks/useFormComponent';
 
 interface FormImageProps {
   component: ComponentDefinition;
 }
 
 const FormImage: React.FC<FormImageProps> = ({ component }) => {
-  const { selectComponent, selectedComponentId } = useFormBuilderStore();
+  const { selectComponent, selectedComponentId, formMode, components, findComponent } = useFormBuilderStore();
   const isSelected = selectedComponentId === component.id;
-  const src = component.props?.src || component.props?.url || '';
-  const alt = component.props?.alt || component.props?.label || '';
-  const width = component.props?.width || 'auto';
-  const height = component.props?.height || 'auto';
+  
+  // Get latest component from store to ensure real-time updates
+  const latestComponent = React.useMemo(() => {
+    return findComponent(component.id) || component;
+  }, [component.id, components, findComponent]);
+  
+  // Use form component hook for computed properties
+  const { computedLabel } = useFormComponent({ component: latestComponent, formMode });
+  
+  const src = latestComponent.props?.src || latestComponent.props?.url || '';
+  const alt = computedLabel || latestComponent.props?.alt || latestComponent.props?.label || '';
+  const width = latestComponent.props?.width || 'auto';
+  const height = latestComponent.props?.height || 'auto';
 
   return (
     <Box
       onClick={(e) => {
-        e.stopPropagation();
-        selectComponent(component.id);
+        if (!formMode) {
+          e.stopPropagation();
+          selectComponent(component.id);
+        }
       }}
       sx={{
-        border: isSelected ? '2px solid #1976d2' : '2px solid transparent',
+        border: isSelected && !formMode ? '2px solid #1976d2' : '2px solid transparent',
         borderRadius: 1,
-        p: 0.5,
-        cursor: 'pointer',
+        p: formMode ? 0 : 0.5,
+        cursor: formMode ? 'default' : 'pointer',
         display: 'inline-block',
       }}
     >
@@ -39,7 +51,11 @@ const FormImage: React.FC<FormImageProps> = ({ component }) => {
             height,
             objectFit: 'contain',
           }}
-          onClick={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            if (!formMode) {
+              e.stopPropagation();
+            }
+          }}
         />
       ) : (
         <Box

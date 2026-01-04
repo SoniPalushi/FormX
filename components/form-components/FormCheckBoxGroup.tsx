@@ -16,8 +16,13 @@ interface FormCheckBoxGroupProps {
 }
 
 const FormCheckBoxGroup: React.FC<FormCheckBoxGroupProps> = ({ component }) => {
-  const { selectComponent, selectedComponentId, formMode } = useFormBuilderStore();
+  const { selectComponent, selectedComponentId, formMode, components, findComponent } = useFormBuilderStore();
   const isSelected = selectedComponentId === component.id;
+  
+  // Get latest component from store to ensure real-time updates
+  const latestComponent = React.useMemo(() => {
+    return findComponent(component.id) || component;
+  }, [component.id, components, findComponent]);
   
   const {
     computedLabel,
@@ -34,19 +39,19 @@ const FormCheckBoxGroup: React.FC<FormCheckBoxGroupProps> = ({ component }) => {
     handleChange,
     handleClick,
     htmlAttributes,
-  } = useFormComponent({ component, formMode });
+  } = useFormComponent({ component: latestComponent, formMode });
   
-  const options = component.props?.options || [];
-  const disabled = component.props?.disabled || false;
-  const required = component.props?.required || false;
-  const row = component.props?.row || false;
-  const color = component.props?.color || 'primary';
-  const size = component.props?.size || 'medium';
-  const margin = component.props?.margin;
-  const padding = component.props?.padding;
-  const classes = component.props?.classes || component.props?.className || [];
+  const options = latestComponent.props?.options || [];
+  const disabled = latestComponent.props?.disabled || false;
+  const required = latestComponent.props?.required || false;
+  const row = latestComponent.props?.row || false;
+  const color = latestComponent.props?.color || 'primary';
+  const size = latestComponent.props?.size || 'medium';
+  const margin = latestComponent.props?.margin;
+  const padding = latestComponent.props?.padding;
+  const classes = latestComponent.props?.classes || latestComponent.props?.className || [];
   
-  const displayValue = formMode ? (boundValue || []) : (computedValue || component.props?.value || []);
+  const displayValue = formMode ? (boundValue || []) : (computedValue || latestComponent.props?.value || []);
   const hasError = !!validationError || !isValid;
 
   if (!shouldRender) return null;
