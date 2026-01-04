@@ -1,0 +1,128 @@
+/**
+ * FormEngine Types - Enhanced Form Storage Structure
+ * Matches FormEngine's PersistedForm format
+ */
+
+// Language definition
+export interface Language {
+  code: string; // e.g., "en-US"
+  name: string; // e.g., "English (US)"
+}
+
+// Responsive CSS/Style structure
+export interface ResponsiveCss {
+  any?: { [key: string]: string };
+  mobile?: { [key: string]: string };
+  tablet?: { [key: string]: string };
+  desktop?: { [key: string]: string };
+}
+
+export interface ResponsiveStyle {
+  any?: React.CSSProperties;
+  mobile?: React.CSSProperties;
+  tablet?: React.CSSProperties;
+  desktop?: React.CSSProperties;
+}
+
+// Component Property with computed/dynamic support
+export interface ComponentProperty<T = any> {
+  value?: T; // Static value
+  fnSource?: string; // Function source code (for computed)
+  computeType?: 'function' | 'localization'; // Property computation type
+  editorType?: string; // Property editor type (for builder)
+}
+
+// Validation Schema
+export interface ValidationRule {
+  key: string; // Rule key (e.g., "email", "min")
+  args?: Record<string, any>; // Rule arguments (e.g., { limit: 10 })
+  message?: string; // Custom error message
+  validateWhen?: string; // Conditional validation expression
+}
+
+export interface ValidationSchema {
+  validations: ValidationRule[];
+}
+
+// Action Definition
+export interface ActionDefinition {
+  name: string; // Action name
+  type: 'common' | 'custom'; // Action type
+  body?: string; // Function source code (for custom)
+  params?: Record<string, 'string' | 'number' | 'boolean' | 'function'>; // Parameter types
+  args?: Record<string, any>; // Action arguments
+}
+
+// Action Data (used in events)
+export interface ActionData {
+  name: string; // Action name
+  type: 'common' | 'custom'; // Action type
+  args?: Record<string, any>; // Action arguments
+}
+
+// Action Event Arguments
+export interface ActionEventArgs {
+  type: string; // Event type (e.g., "onClick")
+  sender: ComponentStore; // Component that triggered event
+  store: any; // Form store
+  args: any[]; // Event arguments
+  renderedProps: Record<string, any>; // Component props
+  event?: React.SyntheticEvent; // React synthetic event
+  value?: any; // First event argument (treated as value)
+  data: Record<string, unknown>; // Form data access
+  parentData?: Record<string, unknown>; // Parent data (for array items)
+  rootData: Record<string, unknown>; // Root form data
+}
+
+// Modal Component Store
+export interface ModalComponentStore {
+  type: string; // Modal component type
+  props?: Record<string, ComponentProperty>; // Modal properties
+  children?: ComponentStore[]; // Modal content
+}
+
+// Component Store (matches FormEngine's ComponentStore)
+export interface ComponentStore {
+  key: string; // Unique component key
+  dataKey?: string; // Data binding key
+  type: string; // Component type (e.g., "MuiTextField")
+  props: Record<string, ComponentProperty>; // Component properties
+  css?: ResponsiveCss; // Responsive CSS styles
+  wrapperCss?: ResponsiveCss; // Wrapper CSS styles
+  style?: ResponsiveStyle; // Responsive inline styles
+  wrapperStyle?: ResponsiveStyle; // Wrapper inline styles
+  events?: Record<string, ActionData[]>; // Event handlers
+  children?: ComponentStore[]; // Child components (recursive)
+  schema?: ValidationSchema; // Zod validation schema
+  htmlAttributes?: Array<Record<string, string>>; // Custom HTML attributes
+  tooltipProps?: Record<string, ComponentProperty>; // Tooltip configuration
+  modal?: ModalComponentStore; // Modal configuration
+  slot?: string; // Slot name
+  slotCondition?: string; // Slot binding condition
+  renderWhen?: ComponentProperty<boolean>; // Conditional rendering expression
+  disableDataBinding?: ComponentProperty<boolean>; // Disable data binding flag
+}
+
+// Persisted Form (matches FormEngine's PersistedForm)
+export interface PersistedForm {
+  version: string; // Form version (e.g., "1")
+  actions?: Record<string, ActionDefinition>; // Custom action definitions
+  formValidator?: string; // Form-level validation code
+  errorProps?: Record<string, any>; // Error display component props
+  modalType?: string; // Modal component type name
+  tooltipType?: string; // Tooltip component type name
+  errorType?: string; // Error component type name
+  form: ComponentStore; // Root component tree
+  localization: Record<string, Record<string, Record<string, string>>>; // Localization strings
+  languages: Language[]; // Available languages
+  defaultLanguage: string; // Default language code (e.g., "en-US")
+}
+
+// Form Data Store
+export interface FormDataStore {
+  [key: string]: any;
+}
+
+// Note: ComponentDefinition is defined in stores/types/index.ts
+// This file focuses on FormEngine-specific types
+

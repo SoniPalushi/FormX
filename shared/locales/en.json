@@ -1,0 +1,35 @@
+{
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "preview": "Preview",
+    "undo": "Undo",
+    "redo": "Redo"
+  },
+  "builder": {
+    "title": "FormX",
+    "components": "Components",
+    "properties": "Properties",
+    "workArea": "Work Area",
+    "formMode": "Form Mode",
+    "preview": "Preview",
+    "desktop": "Desktop",
+    "tablet": "Tablet",
+    "mobile": "Mobile"
+  },
+  "components": {
+    "label": "Label",
+    "heading": "Heading",
+    "button": "Button",
+    "textInput": "Text Input",
+    "textarea": "Text Area",
+    "select": "Select",
+    "checkbox": "Checkbox",
+    "radiogroup": "Radio Group",
+    "container": "Container",
+    "form": "Form"
+  }
+}
+

@@ -1,0 +1,35 @@
+{
+  "common": {
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "delete": "Eliminar",
+    "edit": "Editar",
+    "preview": "Vista previa",
+    "undo": "Deshacer",
+    "redo": "Rehacer"
+  },
+  "builder": {
+    "title": "FormX",
+    "components": "Componentes",
+    "properties": "Propiedades",
+    "workArea": "Área de Trabajo",
+    "formMode": "Modo Formulario",
+    "preview": "Vista Previa",
+    "desktop": "Escritorio",
+    "tablet": "Tableta",
+    "mobile": "Móvil"
+  },
+  "components": {
+    "label": "Etiqueta",
+    "heading": "Encabezado",
+    "button": "Botón",
+    "textInput": "Campo de Texto",
+    "textarea": "Área de Texto",
+    "select": "Seleccionar",
+    "checkbox": "Casilla",
+    "radiogroup": "Grupo de Radio",
+    "container": "Contenedor",
+    "form": "Formulario"
+  }
+}
+
