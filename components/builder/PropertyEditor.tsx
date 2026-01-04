@@ -61,20 +61,31 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
 
     // Compare values (handle objects/arrays properly)
     const currentValue = currentComponent.props?.[key];
-    const valuesEqual = typeof value === 'object' && value !== null && typeof currentValue === 'object' && currentValue !== null
-      ? JSON.stringify(currentValue) === JSON.stringify(value)
-      : currentValue === value;
     
-    if (valuesEqual) return;
+    // Special handling for optionsSource - always update when changing source type
+    if (key === 'optionsSource') {
+      // For optionsSource, we want to allow updates even if values seem equal
+      // because we're switching between different source types
+    } else {
+      const valuesEqual = typeof value === 'object' && value !== null && typeof currentValue === 'object' && currentValue !== null
+        ? JSON.stringify(currentValue) === JSON.stringify(value)
+        : currentValue === value;
+      
+      if (valuesEqual && value !== undefined) return;
+    }
 
     updatingRef.current = true;
 
-    // Update component
+    // Update component - handle undefined by deleting the property
+    const newProps = { ...(currentComponent.props || {}) };
+    if (value === undefined) {
+      delete newProps[key];
+    } else {
+      newProps[key] = value;
+    }
+
     updateComponent(component.id, {
-      props: {
-        ...(currentComponent.props || {}),
-        [key]: value,
-      },
+      props: newProps,
     });
     
     // Reset flag and add to history after update completes
@@ -500,26 +511,50 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
                 Options Data Source
               </Typography>
               <FormControl fullWidth size="small" sx={{ mb: 1 }}>
-                <InputLabel>Source Type</InputLabel>
+                <InputLabel id={`source-type-label-${componentWithProps.id}`}>Source Type</InputLabel>
                 <Select
-                  value={
-                    typeof componentWithProps.props?.optionsSource === 'function' ? 'function' :
-                    typeof componentWithProps.props?.optionsSource === 'object' && componentWithProps.props?.optionsSource?.computeType ? 'computed' :
-                    typeof componentWithProps.props?.optionsSource === 'string' && !Array.isArray(componentWithProps.props?.options) ? 'dataKey' :
-                    'static'
-                  }
+                  key={`source-type-select-${componentWithProps.id}-${JSON.stringify(componentWithProps.props?.optionsSource)}`}
+                  labelId={`source-type-label-${componentWithProps.id}`}
+                  value={(() => {
+                    const optionsSource = componentWithProps.props?.optionsSource;
+                    // Check if it's a function
+                    if (typeof optionsSource === 'function') {
+                      return 'function';
+                    }
+                    // Check if it's a computed property object
+                    if (typeof optionsSource === 'object' && optionsSource !== null && 'computeType' in optionsSource) {
+                      return 'computed';
+                    }
+                    // Check if it's a string (could be function code or dataKey)
+                    if (typeof optionsSource === 'string' && optionsSource !== '') {
+                      // If it looks like function code (contains => or function), it's a function
+                      if (optionsSource.includes('=>') || optionsSource.includes('function') || optionsSource.startsWith('(')) {
+                        return 'function';
+                      }
+                      // Otherwise it's a dataKey
+                      return 'dataKey';
+                    }
+                    // Default to static
+                    return 'static';
+                  })()}
                   label="Source Type"
                   onChange={(e) => {
-                    if (e.target.value === 'static') {
-                      // Keep existing options
-                    } else if (e.target.value === 'function') {
+                    e.stopPropagation();
+                    const newValue = e.target.value;
+                    if (newValue === 'static') {
+                      // Clear optionsSource to use static options
+                      handlePropertyChange('optionsSource', undefined);
+                    } else if (newValue === 'function') {
+                      // Set as string first, will be converted to function when user enters code
                       handlePropertyChange('optionsSource', '(data, component) => { return []; }');
-                    } else if (e.target.value === 'computed') {
+                    } else if (newValue === 'computed') {
                       handlePropertyChange('optionsSource', { computeType: 'function', fnSource: 'return [];' });
-                    } else if (e.target.value === 'dataKey') {
+                    } else if (newValue === 'dataKey') {
                       handlePropertyChange('optionsSource', '');
                     }
                   }}
+                  onClick={(e) => e.stopPropagation()}
+                  onMouseDown={(e) => e.stopPropagation()}
                 >
                   <MenuItem value="static">Static Array</MenuItem>
                   <MenuItem value="function">Function (Data Provider)</MenuItem>
@@ -529,11 +564,30 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
               </FormControl>
               
               {(() => {
-                const sourceType = 
-                  typeof componentWithProps.props?.optionsSource === 'function' ? 'function' :
-                  typeof componentWithProps.props?.optionsSource === 'object' && componentWithProps.props?.optionsSource?.computeType ? 'computed' :
-                  typeof componentWithProps.props?.optionsSource === 'string' && !Array.isArray(componentWithProps.props?.options) ? 'dataKey' :
-                  'static';
+                const optionsSource = componentWithProps.props?.optionsSource;
+                let sourceType: string;
+                // Check if it's a function
+                if (typeof optionsSource === 'function') {
+                  sourceType = 'function';
+                }
+                // Check if it's a computed property object
+                else if (typeof optionsSource === 'object' && optionsSource !== null && 'computeType' in optionsSource) {
+                  sourceType = 'computed';
+                }
+                // Check if it's a string (could be function code or dataKey)
+                else if (typeof optionsSource === 'string' && optionsSource !== '') {
+                  // If it looks like function code (contains => or function), it's a function
+                  if (optionsSource.includes('=>') || optionsSource.includes('function') || optionsSource.startsWith('(')) {
+                    sourceType = 'function';
+                  } else {
+                    // Otherwise it's a dataKey
+                    sourceType = 'dataKey';
+                  }
+                }
+                // Default to static
+                else {
+                  sourceType = 'static';
+                }
                 
                 if (sourceType === 'static') {
                   return (

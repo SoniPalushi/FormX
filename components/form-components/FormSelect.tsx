@@ -99,8 +99,9 @@ const FormSelect: React.FC<FormSelectProps> = ({ component }) => {
   const padding = component.props?.padding;
   const width = component.props?.width;
   const classes = component.props?.classes || component.props?.className || [];
-  
-  const calculatedWidth = width || (fullWidth ? '100%' : 'auto');
+
+  // Default to fullWidth if not explicitly set and no width specified
+  const calculatedWidth = width || (fullWidth ? '100%' : (formMode ? '100%' : '300px'));
   const displayValue = formMode ? boundValue : computedValue;
   const displayHelperText = validationError || computedHelperText || '';
   const hasError = !!validationError || !isValid;
@@ -139,6 +140,7 @@ const FormSelect: React.FC<FormSelectProps> = ({ component }) => {
         size={size as any}
         sx={{
           ...(width ? { width } : undefined),
+          minWidth: !width && !fullWidth ? '200px' : undefined,
           ...responsiveSx,
         }}
         style={responsiveCss ? { style: responsiveCss } : undefined}
