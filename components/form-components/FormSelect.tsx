@@ -36,6 +36,8 @@ const FormSelect: React.FC<FormSelectProps> = ({ component }) => {
   
   // Support multiple data source types for options
   const optionsSource = component.props?.optionsSource || component.props?.options;
+  // Subscribe to form data for reactive updates
+  const formData = useFormDataStore((state) => state.data);
   const { getAllData, getData } = useFormDataStore();
   
   const options = React.useMemo(() => {
@@ -49,7 +51,6 @@ const FormSelect: React.FC<FormSelectProps> = ({ component }) => {
     // If it's a computed property (object with computeType)
     if (typeof optionsSource === 'object' && optionsSource !== null && 'computeType' in optionsSource) {
       try {
-        const formData = getAllData();
         const evaluated = ComputedPropertyEvaluator.evaluate(
           optionsSource as any,
           formData
@@ -64,7 +65,6 @@ const FormSelect: React.FC<FormSelectProps> = ({ component }) => {
     // If it's a function (data provider)
     if (typeof optionsSource === 'function') {
       try {
-        const formData = getAllData();
         const result = optionsSource(formData, component);
         return Array.isArray(result) ? result : [];
       } catch (error) {
@@ -87,7 +87,7 @@ const FormSelect: React.FC<FormSelectProps> = ({ component }) => {
     }
     
     return [];
-  }, [optionsSource, component, getAllData, getData]);
+  }, [optionsSource, component, formData, getData]); // Added formData dependency for reactivity
   
   const variant = component.props?.variant || 'outlined';
   const fullWidth = component.props?.fullWidth !== false;
