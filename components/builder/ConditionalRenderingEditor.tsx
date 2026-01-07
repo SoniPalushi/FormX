@@ -13,6 +13,8 @@ import {
 } from '@mui/material';
 import type { ComponentProperty } from '../../stores/types/formEngine';
 import { ConditionalRenderer } from '../../utils/rendering/conditionalRendering';
+import { useModeStore } from '../../stores/modeStore';
+import { CONDITIONAL_RENDERING_MODES_CLASSIFICATION, isFeatureAvailable } from '../../utils/modes/featureClassification';
 
 interface ConditionalRenderingEditorProps {
   renderWhen?: ComponentProperty<boolean>;
@@ -25,6 +27,7 @@ const ConditionalRenderingEditor: React.FC<ConditionalRenderingEditorProps> = ({
   formData = {},
   onChange,
 }) => {
+  const advancedMode = useModeStore((state) => state.advancedMode);
   const [mode, setMode] = useState<'always' | 'expression' | 'function'>(
     !renderWhen ? 'always' :
     renderWhen.computeType === 'function' ? 'function' :
@@ -101,8 +104,12 @@ const ConditionalRenderingEditor: React.FC<ConditionalRenderingEditorProps> = ({
           size="small"
         >
           <ToggleButton value="always">Always</ToggleButton>
-          <ToggleButton value="expression">Expression</ToggleButton>
-          <ToggleButton value="function">Function</ToggleButton>
+          {isFeatureAvailable('expression', CONDITIONAL_RENDERING_MODES_CLASSIFICATION, advancedMode) && (
+            <ToggleButton value="expression">Expression</ToggleButton>
+          )}
+          {isFeatureAvailable('function', CONDITIONAL_RENDERING_MODES_CLASSIFICATION, advancedMode) && (
+            <ToggleButton value="function">Function</ToggleButton>
+          )}
         </ToggleButtonGroup>
       </Box>
 

@@ -29,6 +29,8 @@ import AutoBrowse from './AutoBrowse';
 // Import store directly for getState()
 import { useFormBuilderStore } from '../../stores/formBuilderStore';
 import { getDataviewManager } from '../../utils/dataviews/dataviewManager';
+import { useModeStore } from '../../stores/modeStore';
+import { DATA_SOURCE_TYPES_CLASSIFICATION, COMPONENT_PROPERTIES_CLASSIFICATION, SECTIONS_CLASSIFICATION, isFeatureAvailable } from '../../utils/modes/featureClassification';
 
 interface PropertyEditorProps {
   component: ComponentDefinition;
@@ -38,6 +40,9 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
   const { updateComponent, deleteComponent, duplicateComponent, components, findComponent } = useFormBuilderStore();
   const { addToHistory } = useHistoryStore();
   const updatingRef = React.useRef(false);
+  
+  // Advanced Mode from global store
+  const advancedMode = useModeStore((state) => state.advancedMode);
   
   // Initialize DataviewManager
   const [dataviewManager] = React.useState(() => getDataviewManager());
@@ -51,24 +56,11 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
         setDataviewsLoading(true);
         await dataviewManager.list.init();
       } catch (error) {
-        console.error('Failed to load dataviews:', error);
-      } finally {
-        setDataviewsLoading(false);
-      }
-    };
-    loadDataviews();
-  }, [dataviewManager]);
-  
-  // Initialize DataviewManager
-  
-  // Load dataviews list on mount
-  React.useEffect(() => {
-    const loadDataviews = async () => {
-      try {
-        setDataviewsLoading(true);
-        await dataviewManager.list.init();
-      } catch (error) {
-        console.error('Failed to load dataviews:', error);
+        // Silently fail if API is not available - system works without dataviews
+        // Only log in development mode
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('Dataviews API not available. System will work without dataviews feature.', error);
+        }
       } finally {
         setDataviewsLoading(false);
       }
@@ -281,15 +273,17 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
               fullWidth
               sx={{ mt: 0.75 }}
             />
-            <TextField
-              label="Pattern (RegEx)"
-              value={componentWithProps.props?.pattern || ''}
-              onChange={(e) => handlePropertyChange('pattern', e.target.value)}
-              size="small"
-              fullWidth
-              sx={{ mt: 0.75 }}
-              helperText="HTML5 pattern attribute for validation"
-            />
+            {isFeatureAvailable('pattern', COMPONENT_PROPERTIES_CLASSIFICATION, advancedMode) && (
+              <TextField
+                label="Pattern (RegEx)"
+                value={componentWithProps.props?.pattern || ''}
+                onChange={(e) => handlePropertyChange('pattern', e.target.value)}
+                size="small"
+                fullWidth
+                sx={{ mt: 0.75 }}
+                helperText="HTML5 pattern attribute for validation"
+              />
+            )}
             <FormControl fullWidth sx={{ mt: 1 }}>
               <InputLabel>Type</InputLabel>
               <Select
@@ -580,6 +574,11 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
                   onChange={(e) => {
                     e.stopPropagation();
                     const newValue = e.target.value;
+                    // If switching to advanced type but advanced mode is off, reset to static
+                    if ((newValue === 'function' || newValue === 'computed') && !advancedMode) {
+                      handlePropertyChange('optionsSource', undefined);
+                      return;
+                    }
                     if (newValue === 'static') {
                       // Clear optionsSource to use static options
                       handlePropertyChange('optionsSource', undefined);
@@ -596,8 +595,12 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
                   onMouseDown={(e) => e.stopPropagation()}
                 >
                   <MenuItem value="static">Static Array</MenuItem>
-                  <MenuItem value="function">Function (Data Provider)</MenuItem>
-                  <MenuItem value="computed">Computed Property</MenuItem>
+                  {isFeatureAvailable('function', DATA_SOURCE_TYPES_CLASSIFICATION, advancedMode) && (
+                    <MenuItem value="function">Function (Data Provider)</MenuItem>
+                  )}
+                  {isFeatureAvailable('computed', DATA_SOURCE_TYPES_CLASSIFICATION, advancedMode) && (
+                    <MenuItem value="computed">Computed Property</MenuItem>
+                  )}
                   <MenuItem value="dataKey">Data Key (from Form Data)</MenuItem>
                 </Select>
               </FormControl>
@@ -656,7 +659,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
                       />
                     </>
                   );
-                } else if (sourceType === 'function') {
+                } else if (sourceType === 'function' && advancedMode) {
                   return (
                     <TextField
                       label="Function Source Code"
@@ -684,7 +687,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
                       helperText="JavaScript function that returns an array of options"
                     />
                   );
-                } else if (sourceType === 'computed') {
+                } else if (sourceType === 'computed' && advancedMode) {
                   return (
                     <Box sx={{ mt: 0.5 }}>
                       <ComputedPropertyEditor
@@ -1363,8 +1366,9 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
                 }
                 valueField="dataview_id"
                 labelField="description"
-                dataProvider={dataviewManager.list.getAllLoadedData()}
+                dataProvider={dataviewManager.list.getAllLoadedData() || []}
                 loading={dataviewsLoading}
+                disabled={dataviewsLoading}
                 onChange={async (selected) => {
                   if (selected && selected.length > 0) {
                     const dataview = selected[0];
@@ -1463,53 +1467,142 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
               <Typography variant="caption" sx={{ display: 'block', mb: 0.5, fontWeight: 600 }}>
                 Data Source
               </Typography>
-              <FormControl fullWidth size="small" sx={{ mb: 1 }}>
-                <InputLabel>Source Type</InputLabel>
-                <Select
-                  value={
-                    typeof componentWithProps.props?.dataSource === 'function' ? 'function' :
-                    typeof componentWithProps.props?.dataSource === 'object' && componentWithProps.props?.dataSource?.computeType ? 'computed' :
-                    typeof componentWithProps.props?.dataSource === 'string' && !Array.isArray(componentWithProps.props?.rows) && !Array.isArray(componentWithProps.props?.data) ? 'dataKey' :
-                    'static'
-                  }
-                  label="Source Type"
-                  onChange={(e) => {
-                    if (e.target.value === 'static') {
-                      // When switching to static, preserve existing data if available
-                      const existingData = componentWithProps.props?.dataSource || 
-                                         componentWithProps.props?.rows || 
-                                         componentWithProps.props?.data;
-                      // Only set if we have actual data, otherwise leave it
-                      if (existingData !== undefined && existingData !== null) {
-                        if (Array.isArray(existingData) && existingData.length > 0) {
-                          handlePropertyChange('dataSource', existingData);
-                        } else if (!Array.isArray(existingData)) {
-                          // If it's not an array, try to convert or set empty array
-                          handlePropertyChange('dataSource', []);
-                        }
-                      }
-                    } else if (e.target.value === 'function') {
-                      handlePropertyChange('dataSource', '(data, component) => { return []; }');
-                    } else if (e.target.value === 'computed') {
-                      handlePropertyChange('dataSource', { computeType: 'function', fnSource: 'return [];' });
-                    } else if (e.target.value === 'dataKey') {
-                      handlePropertyChange('dataSource', '');
-                    }
-                  }}
-                >
-                  <MenuItem value="static">Static Array</MenuItem>
-                  <MenuItem value="function">Function (Data Provider)</MenuItem>
-                  <MenuItem value="computed">Computed Property</MenuItem>
-                  <MenuItem value="dataKey">Data Key (from Form Data)</MenuItem>
-                </Select>
-              </FormControl>
-              
               {(() => {
-                const sourceType = 
-                  typeof componentWithProps.props?.dataSource === 'function' ? 'function' :
-                  typeof componentWithProps.props?.dataSource === 'object' && componentWithProps.props?.dataSource?.computeType ? 'computed' :
-                  typeof componentWithProps.props?.dataSource === 'string' && !Array.isArray(componentWithProps.props?.rows) && !Array.isArray(componentWithProps.props?.data) ? 'dataKey' :
-                  'static';
+                // Helper function to detect source type
+                const detectSourceType = (): 'static' | 'function' | 'computed' | 'dataKey' | 'dataview' => {
+                  const dataSource = componentWithProps.props?.dataSource;
+                  
+                  // Check if it's a dataview object
+                  if (dataSource && typeof dataSource === 'object' && !Array.isArray(dataSource) && 'dataview_id' in dataSource) {
+                    return 'dataview';
+                  }
+                  
+                  // Check if it's a function
+                  if (typeof dataSource === 'function') {
+                    return 'function';
+                  }
+                  
+                  // Check if it's a computed property object
+                  if (dataSource && typeof dataSource === 'object' && !Array.isArray(dataSource) && 'computeType' in dataSource) {
+                    return 'computed';
+                  }
+                  
+                  // Check if it's an array (static)
+                  if (Array.isArray(dataSource)) {
+                    return 'static';
+                  }
+                  
+                  // Check if it's a string (could be dataKey or function name)
+                  if (typeof dataSource === 'string') {
+                    // If it's a non-empty string and not a JSON array, it's likely a dataKey or function name
+                    if (dataSource.trim() !== '') {
+                      // Try to parse as JSON to see if it's an array
+                      try {
+                        const parsed = JSON.parse(dataSource);
+                        if (Array.isArray(parsed)) {
+                          return 'static';
+                        }
+                      } catch {
+                        // Not valid JSON, could be dataKey or function name
+                        // Check if it looks like a function name (simple identifier)
+                        if (dataSource.match(/^[a-zA-Z_$][a-zA-Z0-9_$]*$/)) {
+                          return 'function';
+                        }
+                        return 'dataKey';
+                      }
+                    }
+                    return 'dataKey';
+                  }
+                  
+                  // Default to static
+                  return 'static';
+                };
+                
+                const currentSourceType = detectSourceType();
+                
+                return (
+                  <>
+                    <FormControl fullWidth size="small" sx={{ mb: 1 }}>
+                      <InputLabel>Source Type</InputLabel>
+                      <Select
+                        value={currentSourceType}
+                        label="Source Type"
+                        onChange={(e) => {
+                          const newType = e.target.value as 'static' | 'function' | 'computed' | 'dataKey' | 'dataview';
+                          const currentDataSource = componentWithProps.props?.dataSource;
+                          
+                          // If switching to advanced type but advanced mode is off, reset to static
+                          if ((newType === 'function' || newType === 'computed') && !advancedMode) {
+                            const existingData = componentWithProps.props?.rows || componentWithProps.props?.data;
+                            handlePropertyChange('dataSource', Array.isArray(existingData) ? existingData : []);
+                            return;
+                          }
+                          
+                          if (newType === 'static') {
+                            // When switching to static, preserve existing array data if available
+                            if (Array.isArray(currentDataSource)) {
+                              // Already an array, keep it
+                              handlePropertyChange('dataSource', currentDataSource);
+                            } else {
+                              // Try to get from rows or data props
+                              const existingData = componentWithProps.props?.rows || componentWithProps.props?.data;
+                              if (Array.isArray(existingData)) {
+                                handlePropertyChange('dataSource', existingData);
+                              } else {
+                                // Set empty array as default
+                                handlePropertyChange('dataSource', []);
+                              }
+                            }
+                          } else if (newType === 'dataview') {
+                            // Don't set anything, let AutoBrowse handle it
+                            if (!(currentDataSource && typeof currentDataSource === 'object' && 'dataview_id' in currentDataSource)) {
+                              // Clear if not already a dataview
+                              handlePropertyChange('dataSource', { dataview_id: '', type: 'dataview' });
+                            }
+                          } else if (newType === 'function') {
+                            // If current value is already a function, keep it
+                            if (typeof currentDataSource === 'function') {
+                              // Keep the function
+                              return;
+                            }
+                            // Otherwise set default function string
+                            handlePropertyChange('dataSource', '(data, component) => { return []; }');
+                          } else if (newType === 'computed') {
+                            // If current value is already a computed property, keep it
+                            if (currentDataSource && typeof currentDataSource === 'object' && 'computeType' in currentDataSource) {
+                              // Keep the computed property
+                              return;
+                            }
+                            // Otherwise set default computed property
+                            handlePropertyChange('dataSource', { computeType: 'function', fnSource: 'return [];' });
+                          } else if (newType === 'dataKey') {
+                            // If current value is already a string (and not a function name), keep it
+                            if (typeof currentDataSource === 'string' && currentDataSource.trim() !== '') {
+                              // Check if it's a function name
+                              if (!currentDataSource.match(/^[a-zA-Z_$][a-zA-Z0-9_$]*$/)) {
+                                // Not a function name, keep as dataKey
+                                return;
+                              }
+                            }
+                            // Otherwise set empty string
+                            handlePropertyChange('dataSource', '');
+                          }
+                        }}
+                      >
+                        <MenuItem value="static">Static Array</MenuItem>
+                        <MenuItem value="dataview">Dataview</MenuItem>
+                        {isFeatureAvailable('function', DATA_SOURCE_TYPES_CLASSIFICATION, advancedMode) && (
+                          <MenuItem value="function">Function (Data Provider)</MenuItem>
+                        )}
+                        {isFeatureAvailable('computed', DATA_SOURCE_TYPES_CLASSIFICATION, advancedMode) && (
+                          <MenuItem value="computed">Computed Property</MenuItem>
+                        )}
+                        <MenuItem value="dataKey">Data Key (from Form Data)</MenuItem>
+                      </Select>
+                    </FormControl>
+                    
+                    {(() => {
+                      const sourceType = currentSourceType;
                 
                 if (sourceType === 'static') {
                   return (
@@ -1560,7 +1653,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
                       />
                     </>
                   );
-                } else if (sourceType === 'function') {
+                } else if (sourceType === 'function' && advancedMode) {
                   return (
                     <TextField
                       label="Function Name or Code"
@@ -1594,7 +1687,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
                       helperText="Enter function name (e.g., 'fetchConsumers') for external API import, or full function code for inline function"
                     />
                   );
-                } else if (sourceType === 'computed') {
+                } else if (sourceType === 'computed' && advancedMode) {
                   return (
                     <Box sx={{ mt: 0.5 }}>
                       <ComputedPropertyEditor
@@ -1620,6 +1713,9 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
                 }
                 return null;
               })()}
+                  </>
+                );
+              })()}
             </Box>
           </>
         );
@@ -1639,43 +1735,146 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
               <Typography variant="caption" sx={{ display: 'block', mb: 0.5, fontWeight: 600 }}>
                 Items Data Source
               </Typography>
-              <FormControl fullWidth size="small" sx={{ mb: 1 }}>
-                <InputLabel>Source Type</InputLabel>
-                <Select
-                  value={
-                    typeof componentWithProps.props?.dataSource === 'function' ? 'function' :
-                    typeof componentWithProps.props?.dataSource === 'object' && componentWithProps.props?.dataSource?.computeType ? 'computed' :
-                    typeof componentWithProps.props?.dataSource === 'string' && !Array.isArray(componentWithProps.props?.items) && !Array.isArray(componentWithProps.props?.data) ? 'dataKey' :
-                    'static'
-                  }
-                  label="Source Type"
-                  onChange={(e) => {
-                    if (e.target.value === 'static') {
-                      handlePropertyChange('dataSource', []);
-                    } else if (e.target.value === 'function') {
-                      handlePropertyChange('dataSource', '(data, component) => { return []; }');
-                    } else if (e.target.value === 'computed') {
-                      handlePropertyChange('dataSource', { computeType: 'function', fnSource: 'return [];' });
-                    } else if (e.target.value === 'dataKey') {
-                      handlePropertyChange('dataSource', '');
-                    }
-                  }}
-                >
-                  <MenuItem value="static">Static Array</MenuItem>
-                  <MenuItem value="function">Function (Data Provider)</MenuItem>
-                  <MenuItem value="computed">Computed Property</MenuItem>
-                  <MenuItem value="dataKey">Data Key (from Form Data)</MenuItem>
-                </Select>
-              </FormControl>
-              
               {(() => {
-                const sourceType = 
-                  typeof componentWithProps.props?.dataSource === 'function' ? 'function' :
-                  typeof componentWithProps.props?.dataSource === 'object' && componentWithProps.props?.dataSource?.computeType ? 'computed' :
-                  typeof componentWithProps.props?.dataSource === 'string' && !Array.isArray(componentWithProps.props?.items) && !Array.isArray(componentWithProps.props?.data) ? 'dataKey' :
-                  'static';
+                // Helper function to detect source type
+                const detectSourceType = (): 'static' | 'function' | 'computed' | 'dataKey' | 'dataview' => {
+                  const dataSource = componentWithProps.props?.dataSource;
+                  
+                  // Check if it's a dataview object
+                  if (dataSource && typeof dataSource === 'object' && !Array.isArray(dataSource) && 'dataview_id' in dataSource) {
+                    return 'dataview';
+                  }
+                  
+                  if (typeof dataSource === 'function') return 'function';
+                  if (dataSource && typeof dataSource === 'object' && !Array.isArray(dataSource) && 'computeType' in dataSource) return 'computed';
+                  if (Array.isArray(dataSource)) return 'static';
+                  
+                  if (typeof dataSource === 'string') {
+                    if (dataSource.trim() !== '') {
+                      try {
+                        const parsed = JSON.parse(dataSource);
+                        if (Array.isArray(parsed)) return 'static';
+                      } catch {
+                        if (dataSource.match(/^[a-zA-Z_$][a-zA-Z0-9_$]*$/)) return 'function';
+                        return 'dataKey';
+                      }
+                    }
+                    return 'dataKey';
+                  }
+                  
+                  if (Array.isArray(componentWithProps.props?.items) || Array.isArray(componentWithProps.props?.data)) {
+                    return 'static';
+                  }
+                  
+                  return 'static';
+                };
                 
-                if (sourceType === 'static') {
+                const currentSourceType = detectSourceType();
+                
+                return (
+                  <>
+                    <FormControl fullWidth size="small" sx={{ mb: 1 }}>
+                      <InputLabel>Source Type</InputLabel>
+                      <Select
+                        value={currentSourceType}
+                        label="Source Type"
+                        onChange={(e) => {
+                          const newType = e.target.value as 'static' | 'function' | 'computed' | 'dataKey';
+                          const currentDataSource = componentWithProps.props?.dataSource;
+                          
+                          if (newType === 'static') {
+                            if (Array.isArray(currentDataSource)) {
+                              handlePropertyChange('dataSource', currentDataSource);
+                            } else {
+                              const existingData = componentWithProps.props?.items || componentWithProps.props?.data;
+                              if (Array.isArray(existingData)) {
+                                handlePropertyChange('dataSource', existingData);
+                              } else {
+                                handlePropertyChange('dataSource', []);
+                              }
+                            }
+                          } else if (newType === 'function') {
+                            // If advanced mode is off, reset to static
+                            if (!advancedMode) {
+                              const existingData = componentWithProps.props?.items || componentWithProps.props?.data;
+                              handlePropertyChange('dataSource', Array.isArray(existingData) ? existingData : []);
+                              return;
+                            }
+                            if (typeof currentDataSource === 'function') return;
+                            handlePropertyChange('dataSource', '(data, component) => { return []; }');
+                          } else if (newType === 'computed') {
+                            // If advanced mode is off, reset to static
+                            if (!advancedMode) {
+                              const existingData = componentWithProps.props?.items || componentWithProps.props?.data;
+                              handlePropertyChange('dataSource', Array.isArray(existingData) ? existingData : []);
+                              return;
+                            }
+                            if (currentDataSource && typeof currentDataSource === 'object' && 'computeType' in currentDataSource) return;
+                            handlePropertyChange('dataSource', { computeType: 'function', fnSource: 'return [];' });
+                          } else if (newType === 'dataKey') {
+                            if (typeof currentDataSource === 'string' && currentDataSource.trim() !== '' && !currentDataSource.match(/^[a-zA-Z_$][a-zA-Z0-9_$]*$/)) return;
+                            handlePropertyChange('dataSource', '');
+                          }
+                        }}
+                      >
+                        <MenuItem value="static">Static Array</MenuItem>
+                        <MenuItem value="function">Function (Data Provider)</MenuItem>
+                        <MenuItem value="computed">Computed Property</MenuItem>
+                        <MenuItem value="dataKey">Data Key (from Form Data)</MenuItem>
+                      </Select>
+                    </FormControl>
+                    
+                    {(() => {
+                      const sourceType = currentSourceType;
+                
+                if (sourceType === 'dataview') {
+                  return (
+                    <Box sx={{ mt: 0.5 }}>
+                      <AutoBrowse
+                        value={
+                          componentWithProps.props?.dataSource && 
+                          typeof componentWithProps.props.dataSource === 'object' &&
+                          'dataview_id' in componentWithProps.props.dataSource
+                            ? [componentWithProps.props.dataSource]
+                            : []
+                        }
+                        valueField="dataview_id"
+                        labelField="description"
+                        dataProvider={dataviewManager.list.getAllLoadedData() || []}
+                        loading={dataviewsLoading}
+                        disabled={dataviewsLoading || !dataviewManager.list.totalRecords}
+                        onChange={async (selected) => {
+                          if (selected && selected.length > 0) {
+                            const dataview = selected[0];
+                            handlePropertyChange('dataSource', {
+                              dataview_id: dataview.id || dataview.dataview_id,
+                              type: 'dataview',
+                            });
+                            try {
+                              const fields = await dataviewManager.loadDataviewFields(dataview.id || dataview.dataview_id);
+                              setDataviewFields(fields);
+                            } catch (error) {
+                              console.error('Failed to load dataview fields:', error);
+                              setDataviewFields([]);
+                            }
+                          } else {
+                            handlePropertyChange('dataSource', undefined);
+                            setDataviewFields([]);
+                          }
+                        }}
+                        onDataviewSelect={async (dataview) => {
+                          try {
+                            const fields = await dataviewManager.loadDataviewFields(dataview.id || dataview.dataview_id);
+                            setDataviewFields(fields);
+                          } catch (error) {
+                            console.error('Failed to load dataview fields:', error);
+                            setDataviewFields([]);
+                          }
+                        }}
+                      />
+                    </Box>
+                  );
+                } else if (sourceType === 'static') {
                   return (
                     <>
                       <Typography variant="caption">Items (JSON array)</Typography>
@@ -1697,7 +1896,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
                       />
                     </>
                   );
-                } else if (sourceType === 'function') {
+                } else if (sourceType === 'function' && advancedMode) {
                   return (
                     <TextField
                       label="Function Source Code"
@@ -1723,7 +1922,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
                       helperText="JavaScript function that returns an array of items"
                     />
                   );
-                } else if (sourceType === 'computed') {
+                } else if (sourceType === 'computed' && advancedMode) {
                   return (
                     <Box sx={{ mt: 0.5 }}>
                       <ComputedPropertyEditor
@@ -1748,6 +1947,9 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
                   );
                 }
                 return null;
+              })()}
+                  </>
+                );
               })()}
             </Box>
             <FormControlLabel
@@ -1790,41 +1992,85 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
               <Typography variant="caption" sx={{ display: 'block', mb: 0.5, fontWeight: 600 }}>
                 Tree Data Source
               </Typography>
-              <FormControl fullWidth size="small" sx={{ mb: 1 }}>
-                <InputLabel>Source Type</InputLabel>
-                <Select
-                  value={
-                    typeof componentWithProps.props?.dataSource === 'function' ? 'function' :
-                    typeof componentWithProps.props?.dataSource === 'object' && componentWithProps.props?.dataSource?.computeType ? 'computed' :
-                    typeof componentWithProps.props?.dataSource === 'string' && !Array.isArray(componentWithProps.props?.data) && !Array.isArray(componentWithProps.props?.treeData) ? 'dataKey' :
-                    'static'
-                  }
-                  label="Source Type"
-                  onChange={(e) => {
-                    if (e.target.value === 'static') {
-                      handlePropertyChange('dataSource', []);
-                    } else if (e.target.value === 'function') {
-                      handlePropertyChange('dataSource', '(data, component) => { return []; }');
-                    } else if (e.target.value === 'computed') {
-                      handlePropertyChange('dataSource', { computeType: 'function', fnSource: 'return [];' });
-                    } else if (e.target.value === 'dataKey') {
-                      handlePropertyChange('dataSource', '');
-                    }
-                  }}
-                >
-                  <MenuItem value="static">Static Array</MenuItem>
-                  <MenuItem value="function">Function (Data Provider)</MenuItem>
-                  <MenuItem value="computed">Computed Property</MenuItem>
-                  <MenuItem value="dataKey">Data Key (from Form Data)</MenuItem>
-                </Select>
-              </FormControl>
-              
               {(() => {
-                const sourceType = 
-                  typeof componentWithProps.props?.dataSource === 'function' ? 'function' :
-                  typeof componentWithProps.props?.dataSource === 'object' && componentWithProps.props?.dataSource?.computeType ? 'computed' :
-                  typeof componentWithProps.props?.dataSource === 'string' && !Array.isArray(componentWithProps.props?.data) && !Array.isArray(componentWithProps.props?.treeData) ? 'dataKey' :
-                  'static';
+                const detectSourceType = (): 'static' | 'function' | 'computed' | 'dataKey' => {
+                  const dataSource = componentWithProps.props?.dataSource;
+                  if (typeof dataSource === 'function') return 'function';
+                  if (dataSource && typeof dataSource === 'object' && !Array.isArray(dataSource) && 'computeType' in dataSource) return 'computed';
+                  if (Array.isArray(dataSource)) return 'static';
+                  if (typeof dataSource === 'string') {
+                    if (dataSource.trim() !== '') {
+                      try {
+                        const parsed = JSON.parse(dataSource);
+                        if (Array.isArray(parsed)) return 'static';
+                      } catch {
+                        if (dataSource.match(/^[a-zA-Z_$][a-zA-Z0-9_$]*$/)) return 'function';
+                        return 'dataKey';
+                      }
+                    }
+                    return 'dataKey';
+                  }
+                  if (Array.isArray(componentWithProps.props?.data) || Array.isArray(componentWithProps.props?.treeData)) return 'static';
+                  return 'static';
+                };
+                
+                const currentSourceType = detectSourceType();
+                
+                return (
+                  <>
+                    <FormControl fullWidth size="small" sx={{ mb: 1 }}>
+                      <InputLabel>Source Type</InputLabel>
+                      <Select
+                        value={currentSourceType}
+                        label="Source Type"
+                        onChange={(e) => {
+                          const newType = e.target.value as 'static' | 'function' | 'computed' | 'dataKey';
+                          const currentDataSource = componentWithProps.props?.dataSource;
+                          
+                          if (newType === 'static') {
+                            if (Array.isArray(currentDataSource)) {
+                              handlePropertyChange('dataSource', currentDataSource);
+                            } else {
+                              const existingData = componentWithProps.props?.data || componentWithProps.props?.treeData;
+                              if (Array.isArray(existingData)) {
+                                handlePropertyChange('dataSource', existingData);
+                              } else {
+                                handlePropertyChange('dataSource', []);
+                              }
+                            }
+                          } else if (newType === 'function') {
+                            // If advanced mode is off, reset to static
+                            if (!advancedMode) {
+                              const existingData = componentWithProps.props?.items || componentWithProps.props?.data;
+                              handlePropertyChange('dataSource', Array.isArray(existingData) ? existingData : []);
+                              return;
+                            }
+                            if (typeof currentDataSource === 'function') return;
+                            handlePropertyChange('dataSource', '(data, component) => { return []; }');
+                          } else if (newType === 'computed') {
+                            // If advanced mode is off, reset to static
+                            if (!advancedMode) {
+                              const existingData = componentWithProps.props?.items || componentWithProps.props?.data;
+                              handlePropertyChange('dataSource', Array.isArray(existingData) ? existingData : []);
+                              return;
+                            }
+                            if (currentDataSource && typeof currentDataSource === 'object' && 'computeType' in currentDataSource) return;
+                            handlePropertyChange('dataSource', { computeType: 'function', fnSource: 'return [];' });
+                          } else if (newType === 'dataKey') {
+                            if (typeof currentDataSource === 'string' && currentDataSource.trim() !== '' && !currentDataSource.match(/^[a-zA-Z_$][a-zA-Z0-9_$]*$/)) return;
+                            handlePropertyChange('dataSource', '');
+                          }
+                        }}
+                      >
+                        <MenuItem value="static">Static Array</MenuItem>
+                        <MenuItem value="function">Function (Data Provider)</MenuItem>
+                        <MenuItem value="computed">Computed Property</MenuItem>
+                        <MenuItem value="dataKey">Data Key (from Form Data)</MenuItem>
+                      </Select>
+                    </FormControl>
+                    
+                    {(() => {
+                      const sourceType = currentSourceType;
                 
                 if (sourceType === 'static') {
                   return (
@@ -1848,7 +2094,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
                       />
                     </>
                   );
-                } else if (sourceType === 'function') {
+                } else if (sourceType === 'function' && advancedMode) {
                   return (
                     <TextField
                       label="Function Source Code"
@@ -1874,7 +2120,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
                       helperText="JavaScript function that returns an array of tree nodes"
                     />
                   );
-                } else if (sourceType === 'computed') {
+                } else if (sourceType === 'computed' && advancedMode) {
                   return (
                     <Box sx={{ mt: 0.5 }}>
                       <ComputedPropertyEditor
@@ -1900,6 +2146,9 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
                 }
                 return null;
               })()}
+                  </>
+                );
+              })()}
             </Box>
           </>
         );
@@ -1919,41 +2168,85 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
               <Typography variant="caption" sx={{ display: 'block', mb: 0.5, fontWeight: 600 }}>
                 Data Source
               </Typography>
-              <FormControl fullWidth size="small" sx={{ mb: 1 }}>
-                <InputLabel>Source Type</InputLabel>
-                <Select
-                  value={
-                    typeof componentWithProps.props?.dataSource === 'function' ? 'function' :
-                    typeof componentWithProps.props?.dataSource === 'object' && componentWithProps.props?.dataSource?.computeType ? 'computed' :
-                    typeof componentWithProps.props?.dataSource === 'string' && !Array.isArray(componentWithProps.props?.rows) && !Array.isArray(componentWithProps.props?.data) ? 'dataKey' :
-                    'static'
-                  }
-                  label="Source Type"
-                  onChange={(e) => {
-                    if (e.target.value === 'static') {
-                      handlePropertyChange('dataSource', []);
-                    } else if (e.target.value === 'function') {
-                      handlePropertyChange('dataSource', '(data, component) => { return []; }');
-                    } else if (e.target.value === 'computed') {
-                      handlePropertyChange('dataSource', { computeType: 'function', fnSource: 'return [];' });
-                    } else if (e.target.value === 'dataKey') {
-                      handlePropertyChange('dataSource', '');
-                    }
-                  }}
-                >
-                  <MenuItem value="static">Static Array</MenuItem>
-                  <MenuItem value="function">Function (Data Provider)</MenuItem>
-                  <MenuItem value="computed">Computed Property</MenuItem>
-                  <MenuItem value="dataKey">Data Key (from Form Data)</MenuItem>
-                </Select>
-              </FormControl>
-              
               {(() => {
-                const sourceType = 
-                  typeof componentWithProps.props?.dataSource === 'function' ? 'function' :
-                  typeof componentWithProps.props?.dataSource === 'object' && componentWithProps.props?.dataSource?.computeType ? 'computed' :
-                  typeof componentWithProps.props?.dataSource === 'string' && !Array.isArray(componentWithProps.props?.rows) && !Array.isArray(componentWithProps.props?.data) ? 'dataKey' :
-                  'static';
+                const detectSourceType = (): 'static' | 'function' | 'computed' | 'dataKey' => {
+                  const dataSource = componentWithProps.props?.dataSource;
+                  if (typeof dataSource === 'function') return 'function';
+                  if (dataSource && typeof dataSource === 'object' && !Array.isArray(dataSource) && 'computeType' in dataSource) return 'computed';
+                  if (Array.isArray(dataSource)) return 'static';
+                  if (typeof dataSource === 'string') {
+                    if (dataSource.trim() !== '') {
+                      try {
+                        const parsed = JSON.parse(dataSource);
+                        if (Array.isArray(parsed)) return 'static';
+                      } catch {
+                        if (dataSource.match(/^[a-zA-Z_$][a-zA-Z0-9_$]*$/)) return 'function';
+                        return 'dataKey';
+                      }
+                    }
+                    return 'dataKey';
+                  }
+                  if (Array.isArray(componentWithProps.props?.rows) || Array.isArray(componentWithProps.props?.data)) return 'static';
+                  return 'static';
+                };
+                
+                const currentSourceType = detectSourceType();
+                
+                return (
+                  <>
+                    <FormControl fullWidth size="small" sx={{ mb: 1 }}>
+                      <InputLabel>Source Type</InputLabel>
+                      <Select
+                        value={currentSourceType}
+                        label="Source Type"
+                        onChange={(e) => {
+                          const newType = e.target.value as 'static' | 'function' | 'computed' | 'dataKey';
+                          const currentDataSource = componentWithProps.props?.dataSource;
+                          
+                          if (newType === 'static') {
+                            if (Array.isArray(currentDataSource)) {
+                              handlePropertyChange('dataSource', currentDataSource);
+                            } else {
+                              const existingData = componentWithProps.props?.rows || componentWithProps.props?.data;
+                              if (Array.isArray(existingData)) {
+                                handlePropertyChange('dataSource', existingData);
+                              } else {
+                                handlePropertyChange('dataSource', []);
+                              }
+                            }
+                          } else if (newType === 'function') {
+                            // If advanced mode is off, reset to static
+                            if (!advancedMode) {
+                              const existingData = componentWithProps.props?.items || componentWithProps.props?.data;
+                              handlePropertyChange('dataSource', Array.isArray(existingData) ? existingData : []);
+                              return;
+                            }
+                            if (typeof currentDataSource === 'function') return;
+                            handlePropertyChange('dataSource', '(data, component) => { return []; }');
+                          } else if (newType === 'computed') {
+                            // If advanced mode is off, reset to static
+                            if (!advancedMode) {
+                              const existingData = componentWithProps.props?.items || componentWithProps.props?.data;
+                              handlePropertyChange('dataSource', Array.isArray(existingData) ? existingData : []);
+                              return;
+                            }
+                            if (currentDataSource && typeof currentDataSource === 'object' && 'computeType' in currentDataSource) return;
+                            handlePropertyChange('dataSource', { computeType: 'function', fnSource: 'return [];' });
+                          } else if (newType === 'dataKey') {
+                            if (typeof currentDataSource === 'string' && currentDataSource.trim() !== '' && !currentDataSource.match(/^[a-zA-Z_$][a-zA-Z0-9_$]*$/)) return;
+                            handlePropertyChange('dataSource', '');
+                          }
+                        }}
+                      >
+                        <MenuItem value="static">Static Array</MenuItem>
+                        <MenuItem value="function">Function (Data Provider)</MenuItem>
+                        <MenuItem value="computed">Computed Property</MenuItem>
+                        <MenuItem value="dataKey">Data Key (from Form Data)</MenuItem>
+                      </Select>
+                    </FormControl>
+                    
+                    {(() => {
+                      const sourceType = currentSourceType;
                 
                 if (sourceType === 'static') {
                   return (
@@ -1992,7 +2285,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
                       />
                     </>
                   );
-                } else if (sourceType === 'function') {
+                } else if (sourceType === 'function' && advancedMode) {
                   return (
                     <TextField
                       label="Function Source Code"
@@ -2018,7 +2311,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
                       helperText="JavaScript function that returns an array of row objects"
                     />
                   );
-                } else if (sourceType === 'computed') {
+                } else if (sourceType === 'computed' && advancedMode) {
                   return (
                     <Box sx={{ mt: 0.5 }}>
                       <ComputedPropertyEditor
@@ -2043,6 +2336,9 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
                   );
                 }
                 return null;
+              })()}
+                  </>
+                );
               })()}
             </Box>
             <FormControlLabel
@@ -2112,8 +2408,12 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
                   }}
                 >
                   <MenuItem value="static">Static Array</MenuItem>
-                  <MenuItem value="function">Function (Data Provider)</MenuItem>
-                  <MenuItem value="computed">Computed Property</MenuItem>
+                  {isFeatureAvailable('function', DATA_SOURCE_TYPES_CLASSIFICATION, advancedMode) && (
+                    <MenuItem value="function">Function (Data Provider)</MenuItem>
+                  )}
+                  {isFeatureAvailable('computed', DATA_SOURCE_TYPES_CLASSIFICATION, advancedMode) && (
+                    <MenuItem value="computed">Computed Property</MenuItem>
+                  )}
                   <MenuItem value="dataKey">Data Key (from Form Data)</MenuItem>
                 </Select>
               </FormControl>
@@ -2143,7 +2443,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
                       />
                     </>
                   );
-                } else if (sourceType === 'function') {
+                } else if (sourceType === 'function' && advancedMode) {
                   const source = componentWithProps.props?.optionsSource || componentWithProps.props?.dataSource;
                   return (
                     <TextField
@@ -2172,7 +2472,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
                       helperText="JavaScript function that returns an array of options"
                     />
                   );
-                } else if (sourceType === 'computed') {
+                } else if (sourceType === 'computed' && advancedMode) {
                   const source = componentWithProps.props?.optionsSource || componentWithProps.props?.dataSource;
                   return (
                     <Box sx={{ mt: 0.5 }}>
@@ -2340,20 +2640,22 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
           </Box>
         )}
 
-        {/* Conditional Rendering Section - for all components */}
-        <Box sx={{ mt: 2, p: 1.5, borderTop: '1px solid', borderColor: 'divider' }}>
-          <Typography variant="overline" sx={{ display: 'block', mb: 1.5, fontSize: '0.7rem', color: 'text.secondary', fontWeight: 600 }}>
-            Conditional Rendering
-          </Typography>
+        {/* Conditional Rendering Section - for all components - Advanced Mode Only */}
+        {advancedMode && (
+          <Box sx={{ mt: 2, p: 1.5, borderTop: '1px solid', borderColor: 'divider' }}>
+            <Typography variant="overline" sx={{ display: 'block', mb: 1.5, fontSize: '0.7rem', color: 'text.secondary', fontWeight: 600 }}>
+              Conditional Rendering
+            </Typography>
           <ConditionalRenderingEditor
             renderWhen={componentWithProps.props?.renderWhen}
             formData={{}}
             onChange={(renderWhen) => handlePropertyChange('renderWhen', renderWhen)}
           />
-        </Box>
+          </Box>
+        )}
 
-        {/* Responsive Styles Section - for all components */}
-        {(componentWithProps.props?.css || componentWithProps.props?.style || componentWithProps.props?.wrapperCss || componentWithProps.props?.wrapperStyle) && (
+        {/* Responsive Styles Section - for all components - Advanced Mode Only */}
+        {advancedMode && (componentWithProps.props?.css || componentWithProps.props?.style || componentWithProps.props?.wrapperCss || componentWithProps.props?.wrapperStyle) && (
           <Box sx={{ mt: 2, p: 1.5, borderTop: '1px solid', borderColor: 'divider' }}>
             <Typography variant="overline" sx={{ display: 'block', mb: 1.5, fontSize: '0.7rem', color: 'text.secondary', fontWeight: 600 }}>
               Responsive Styles

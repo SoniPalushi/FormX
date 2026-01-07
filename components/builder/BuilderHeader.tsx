@@ -18,12 +18,15 @@ import {
   PhoneAndroid as PhoneIcon,
   ViewModule as ViewModuleIcon,
   Article as FormModeIcon,
+  Code as CodeIcon,
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import { useFormBuilderStore } from '../../stores/formBuilderStore';
 import { useHistoryStore } from '../../stores/historyStore';
 import { downloadPersistedForm, readFormFromFile } from '../../utils/formExport';
 import { downloadAsReactComponent } from '../../utils/formToReact';
+import { useModeStore, useModeActions } from '../../stores/modeStore';
+import { Switch, FormControlLabel, Tooltip } from '@mui/material';
 import SaveFormDialog from './SaveFormDialog';
 
 const BuilderHeader: React.FC = () => {
@@ -32,6 +35,10 @@ const BuilderHeader: React.FC = () => {
   const { undo, redo, canUndo, canRedo } = useHistoryStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  
+  // Advanced Mode
+  const advancedMode = useModeStore((state) => state.advancedMode);
+  const { toggleAdvancedMode } = useModeActions();
 
   const handleUndo = () => {
     undo((state) => {
@@ -309,6 +316,29 @@ const BuilderHeader: React.FC = () => {
             style={{ display: 'none' }}
             onChange={handleFileChange}
           />
+          
+          {/* Advanced Mode Toggle */}
+          <Tooltip title={advancedMode ? "Switch to Simple Mode" : "Switch to Advanced Mode (Shows developer features)"}>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={advancedMode}
+                  onChange={toggleAdvancedMode}
+                  size="small"
+                  color="primary"
+                />
+              }
+              label={
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                  <CodeIcon sx={{ fontSize: '0.875rem' }} />
+                  <Typography variant="caption" sx={{ fontSize: '0.75rem', fontWeight: advancedMode ? 600 : 400 }}>
+                    {advancedMode ? 'Advanced' : 'Simple'}
+                  </Typography>
+                </Box>
+              }
+              sx={{ m: 0, ml: 1 }}
+            />
+          </Tooltip>
         </Box>
       </Toolbar>
       <SaveFormDialog

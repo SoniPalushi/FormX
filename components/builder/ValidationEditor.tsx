@@ -21,6 +21,8 @@ import {
   ExpandMore as ExpandMoreIcon,
 } from '@mui/icons-material';
 import type { ValidationRule, ValidationSchema } from '../../stores/types/formEngine';
+import { useModeStore } from '../../stores/modeStore';
+import { VALIDATION_RULES_CLASSIFICATION, isFeatureAvailable } from '../../utils/modes/featureClassification';
 
 interface ValidationEditorProps {
   schema?: ValidationSchema;
@@ -51,12 +53,19 @@ const VALIDATION_RULES: Record<string, { label: string; args: string[]; dataType
 const ValidationEditor: React.FC<ValidationEditorProps> = ({ schema, dataType = 'string', onChange }) => {
   const validations = schema?.validations || [];
   const [expandedRule, setExpandedRule] = useState<number | null>(null);
+  const advancedMode = useModeStore((state) => state.advancedMode);
 
+  // Filter rules based on mode using feature classification
   const availableRules = useMemo(() => {
-    return Object.entries(VALIDATION_RULES).filter(([_, rule]) =>
-      rule.dataTypes.includes(dataType)
-    );
-  }, [dataType]);
+    return Object.entries(VALIDATION_RULES).filter(([key, rule]) => {
+      // Check if rule is available for this data type
+      if (!rule.dataTypes.includes(dataType)) {
+        return false;
+      }
+      // Check if rule is available in current mode
+      return isFeatureAvailable(key, VALIDATION_RULES_CLASSIFICATION, advancedMode);
+    });
+  }, [dataType, advancedMode]);
 
   const handleAddRule = () => {
     const newRule: ValidationRule = {

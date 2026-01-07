@@ -18,6 +18,8 @@ import {
 import { useTranslation } from 'react-i18next';
 import { componentLibrary, getAllCategories } from '../../utils/componentLibrary';
 import ComponentLibraryItem from './ComponentLibraryItem';
+import { useModeStore } from '../../stores/modeStore';
+import { filterComponentsByMode } from '../../utils/modes/componentClassification';
 
 interface ComponentsPanelProps {
   onToggle: () => void;
@@ -28,8 +30,12 @@ const ComponentsPanel: React.FC<ComponentsPanelProps> = ({ onToggle }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const categories = ['All', ...getAllCategories()];
-
-  const filteredComponents = componentLibrary.filter((component) => {
+  
+  // Advanced Mode
+  const advancedMode = useModeStore((state) => state.advancedMode);
+  
+  // Filter components by mode first, then by search and category
+  const filteredComponents = filterComponentsByMode(componentLibrary, advancedMode).filter((component) => {
     const matchesSearch = component.componentNameLabel.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = selectedCategory === 'All' || component.category === selectedCategory;
     return matchesSearch && matchesCategory;

@@ -21,6 +21,8 @@ import {
   ExpandMore as ExpandMoreIcon,
 } from '@mui/icons-material';
 import type { ActionData } from '../../stores/types/formEngine';
+import { useModeStore } from '../../stores/modeStore';
+import { EVENT_ACTIONS_CLASSIFICATION, isFeatureAvailable } from '../../utils/modes/featureClassification';
 
 interface EventHandlerEditorProps {
   events?: Record<string, ActionData[]>;
@@ -48,6 +50,7 @@ const COMMON_ACTIONS = [
 ];
 
 const EventHandlerEditor: React.FC<EventHandlerEditorProps> = ({ events = {}, onChange }) => {
+  const advancedMode = useModeStore((state) => state.advancedMode);
   const [expandedEvent, setExpandedEvent] = useState<string | null>(null);
   const [expandedAction, setExpandedAction] = useState<string | null>(null);
 
@@ -227,7 +230,9 @@ const EventHandlerEditor: React.FC<EventHandlerEditorProps> = ({ events = {}, on
                                   }
                                 >
                                   <MenuItem value="common">Common Action</MenuItem>
-                                  <MenuItem value="custom">Custom Function</MenuItem>
+                                  {isFeatureAvailable('custom', EVENT_ACTIONS_CLASSIFICATION, advancedMode) && (
+                                    <MenuItem value="custom">Custom Function</MenuItem>
+                                  )}
                                 </Select>
                               </FormControl>
 

@@ -4,6 +4,8 @@
  */
 
 import { ComputedPropertyEvaluator } from '../properties/computedProperties';
+import { RemoteArray } from './RemoteArray';
+import { getDataviewManager } from '../dataviews/dataviewManager';
 import type { ComponentDefinition } from '../../stores/types';
 
 export interface DataSourceResolverOptions {
