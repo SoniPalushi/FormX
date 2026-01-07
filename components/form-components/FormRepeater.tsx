@@ -7,7 +7,7 @@ import { useFormBuilderStore } from '../../stores/formBuilderStore';
 import { useFormDataStore } from '../../stores/formDataStore';
 import { ActionHandler } from '../../utils/actions/actionSystem';
 import { ConditionalRenderer } from '../../utils/rendering/conditionalRendering';
-import { resolveArrayDataSource } from '../../utils/data/dataSourceResolver';
+import { resolveArrayDataSourceSync } from '../../utils/data/dataSourceResolver';
 import DraggableComponent from '../builder/DraggableComponent';
 
 interface FormRepeaterProps {
@@ -43,9 +43,10 @@ const FormRepeater: React.FC<FormRepeaterProps> = ({ component }) => {
   const itemRenderWhen = latestComponent.props?.itemRenderWhen;
   
   // Get data provider items using resolver (supports array, function, computed property, dataKey, JSON string)
+  // Note: For async sources like dataview references, use useEffect instead
   const dataProviderItems = useMemo(() => {
     if (!dataSource) return [];
-    return resolveArrayDataSource({
+    return resolveArrayDataSourceSync({
       source: dataSource,
       formData: data,
       component: latestComponent,

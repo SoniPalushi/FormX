@@ -27,6 +27,10 @@ const WorkArea: React.FC = () => {
         p: 1.5,
         bgcolor: 'background.default',
         ...getPreviewStyle(),
+        // Prevent workspace from reacting to drag events
+        position: 'relative',
+        // Ensure workspace doesn't shift during drag
+        willChange: 'auto',
       }}
     >
       <Paper
@@ -39,6 +43,9 @@ const WorkArea: React.FC = () => {
           border: '1px solid',
           borderColor: 'divider',
           borderRadius: 2,
+          // Prevent Paper from reacting to drag
+          transform: 'none',
+          transition: 'none',
         }}
       >
         <FormCanvas components={components} />

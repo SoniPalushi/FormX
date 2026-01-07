@@ -178,21 +178,6 @@ export class ZodValidationBuilder {
         }
         return schema;
       
-      // Date validations
-      case 'min':
-        if (dataType === 'date') {
-          const minDate = args.limit ? new Date(args.limit) : new Date();
-          return (schema as z.ZodDate).min(minDate, message || `Date must be after ${minDate.toISOString()}`);
-        }
-        return schema;
-      
-      case 'max':
-        if (dataType === 'date') {
-          const maxDate = args.limit ? new Date(args.limit) : new Date();
-          return (schema as z.ZodDate).max(maxDate, message || `Date must be before ${maxDate.toISOString()}`);
-        }
-        return schema;
-      
       default:
         return schema;
     }

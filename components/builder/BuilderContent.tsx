@@ -5,11 +5,12 @@ import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core';
 import ComponentsPanel from './ComponentsPanel';
 import WorkArea from './WorkArea';
 import PropertyPanel from './PropertyPanel';
+import FormComponentRenderer from '../form-components/FormComponentRenderer';
 import { useFormBuilderStore } from '../../stores/formBuilderStore';
 import { useHistoryStore } from '../../stores/historyStore';
 import type { ComponentDefinition, ComponentType } from '../../stores/types';
 
-const DRAWER_WIDTH = 350;
+const DRAWER_WIDTH = 400;
 const PROPERTY_PANEL_WIDTH = 300;
 
 const BuilderContent: React.FC = () => {
@@ -136,8 +137,20 @@ const BuilderContent: React.FC = () => {
       collisionDetection={closestCenter}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
+      // Prevent drag from affecting parent containers
+      autoScroll={{ threshold: { x: 0, y: 0.2 } }}
     >
-      <Box sx={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+      <Box 
+        sx={{ 
+          display: 'flex', 
+          flex: 1, 
+          overflow: 'hidden',
+          // Prevent workspace container from reacting to drag
+          position: 'relative',
+          transform: 'none !important',
+          willChange: 'auto',
+        }}
+      >
         {/* Left Drawer - Component Library */}
         <Drawer
           variant="persistent"
@@ -166,6 +179,10 @@ const BuilderContent: React.FC = () => {
             flexDirection: 'column',
             overflow: 'hidden',
             bgcolor: 'background.default',
+            // Prevent main area from reacting to drag
+            position: 'relative',
+            transform: 'none',
+            willChange: 'auto',
           }}
         >
           <WorkArea />
@@ -191,11 +208,36 @@ const BuilderContent: React.FC = () => {
           <PropertyPanel onToggle={() => setRightOpen(!rightOpen)} />
         </Drawer>
       </Box>
-      <DragOverlay>
+      <DragOverlay
+        style={{
+          // Ensure overlay is completely isolated from layout
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          zIndex: 9999,
+          pointerEvents: 'none', // Prevent overlay from capturing any events
+        }}
+        dropAnimation={null} // Disable drop animation to prevent layout shifts
+      >
         {activeId && draggedComponent ? (
-          <Paper sx={{ p: 2, opacity: 0.8, maxWidth: 200 }}>
-            {draggedComponent.type}
-          </Paper>
+          <Box
+            sx={{
+              opacity: 0.9,
+              transform: 'rotate(2deg)',
+              cursor: 'grabbing',
+              pointerEvents: 'none',
+              boxShadow: '0 8px 24px rgba(0, 0, 0, 0.2)',
+              // Ensure overlay doesn't affect layout - use fixed positioning
+              position: 'fixed',
+              willChange: 'transform',
+              // Prevent any layout impact
+              isolation: 'isolate',
+            }}
+          >
+            <FormComponentRenderer component={draggedComponent} />
+          </Box>
         ) : null}
       </DragOverlay>
     </DndContext>

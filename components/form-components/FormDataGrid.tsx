@@ -13,7 +13,7 @@ import {
 import type { ComponentDefinition } from '../../stores/types';
 import { useFormBuilderStore } from '../../stores/formBuilderStore';
 import { useFormDataStore } from '../../stores/formDataStore';
-import { resolveArrayDataSource } from '../../utils/data/dataSourceResolver';
+import { resolveArrayDataSource, resolveArrayDataSourceSync } from '../../utils/data/dataSourceResolver';
 
 interface FormDataGridProps {
   component: ComponentDefinition;
@@ -54,9 +54,10 @@ const FormDataGrid: React.FC<FormDataGridProps> = ({ component }) => {
     return [];
   }, [latestComponent.props?.dataSource, latestComponent.props?.rows, latestComponent.props?.data]);
   
-  // Resolve data from various sources
+  // Resolve data from various sources (sync version for useMemo)
+  // Note: For async sources like dataview references, use useEffect instead
   const rows = useMemo(() => {
-    return resolveArrayDataSource({
+    return resolveArrayDataSourceSync({
       source: dataSource,
       formData: data,
       component: latestComponent,

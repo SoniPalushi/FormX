@@ -33,8 +33,12 @@ const FormCanvas: React.FC<FormCanvasProps> = ({ components }) => {
         borderRadius: 2,
         p: 1.5,
         bgcolor: isOver ? 'rgba(25, 118, 210, 0.05)' : 'transparent',
-        transition: 'all 0.2s ease',
+        transition: 'border-color 0.2s ease, background-color 0.2s ease',
         cursor: 'default',
+        // Prevent canvas from shifting during drag
+        position: 'relative',
+        transform: 'none',
+        willChange: 'auto',
       }}
     >
       {components.length === 0 ? (
@@ -59,6 +63,9 @@ const FormCanvas: React.FC<FormCanvasProps> = ({ components }) => {
             gap: 1.5,
             flexWrap: 'wrap',
             alignItems: 'flex-start',
+            // Prevent layout shifts during drag
+            position: 'relative',
+            minHeight: 'fit-content',
           }}
         >
           {components.map((component) => (

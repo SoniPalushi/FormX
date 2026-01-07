@@ -18,7 +18,7 @@ import type { ComponentDefinition } from '../../stores/types';
 import { useFormBuilderStore } from '../../stores/formBuilderStore';
 import { useFormDataStore } from '../../stores/formDataStore';
 import { useFormComponent } from '../../hooks/useFormComponent';
-import { resolveArrayDataSource } from '../../utils/data/dataSourceResolver';
+import { resolveArrayDataSourceSync } from '../../utils/data/dataSourceResolver';
 
 interface FormDataBrowseProps {
   component: ComponentDefinition;
@@ -54,9 +54,10 @@ const FormDataBrowse: React.FC<FormDataBrowseProps> = ({ component }) => {
                      latestComponent.props?.rows || 
                      [];
   
-  // Resolve data from various sources
+  // Resolve data from various sources (sync version for useMemo)
+  // Note: For async sources like dataview references, use useEffect instead
   const resolvedData = useMemo(() => {
-    return resolveArrayDataSource({
+    return resolveArrayDataSourceSync({
       source: dataSource,
       formData: data,
       component: latestComponent,

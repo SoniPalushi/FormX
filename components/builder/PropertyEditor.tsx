@@ -25,8 +25,10 @@ import EventHandlerEditor from './EventHandlerEditor';
 import ComputedPropertyEditor from './ComputedPropertyEditor';
 import ResponsiveStylesEditor from './ResponsiveStylesEditor';
 import ConditionalRenderingEditor from './ConditionalRenderingEditor';
+import AutoBrowse from './AutoBrowse';
 // Import store directly for getState()
 import { useFormBuilderStore } from '../../stores/formBuilderStore';
+import { getDataviewManager } from '../../utils/dataviews/dataviewManager';
 
 interface PropertyEditorProps {
   component: ComponentDefinition;
@@ -36,6 +38,43 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
   const { updateComponent, deleteComponent, duplicateComponent, components, findComponent } = useFormBuilderStore();
   const { addToHistory } = useHistoryStore();
   const updatingRef = React.useRef(false);
+  
+  // Initialize DataviewManager
+  const [dataviewManager] = React.useState(() => getDataviewManager());
+  const [dataviewsLoading, setDataviewsLoading] = React.useState(false);
+  const [dataviewFields, setDataviewFields] = React.useState<string[]>([]);
+  
+  // Load dataviews list on mount
+  React.useEffect(() => {
+    const loadDataviews = async () => {
+      try {
+        setDataviewsLoading(true);
+        await dataviewManager.list.init();
+      } catch (error) {
+        console.error('Failed to load dataviews:', error);
+      } finally {
+        setDataviewsLoading(false);
+      }
+    };
+    loadDataviews();
+  }, [dataviewManager]);
+  
+  // Initialize DataviewManager
+  
+  // Load dataviews list on mount
+  React.useEffect(() => {
+    const loadDataviews = async () => {
+      try {
+        setDataviewsLoading(true);
+        await dataviewManager.list.init();
+      } catch (error) {
+        console.error('Failed to load dataviews:', error);
+      } finally {
+        setDataviewsLoading(false);
+      }
+    };
+    loadDataviews();
+  }, [dataviewManager]);
 
   // Get the latest component data from store to ensure we have updated props
   const latestComponent = React.useMemo(() => {
@@ -845,57 +884,6 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
           </>
         );
 
-      case 'AutoComplete':
-        return (
-          <>
-            <TextField
-              label="Label"
-              value={componentWithProps.props?.label || ''}
-              onChange={(e) => handlePropertyChange('label', e.target.value)}
-              size="small"
-              fullWidth
-              sx={{ mt: 0.75 }}
-            />
-            <Box sx={{ mt: 1 }}>
-              <Typography variant="caption">Options (one per line)</Typography>
-              <TextField
-                value={(componentWithProps.props?.options || []).join('\n')}
-                onChange={(e) => {
-                  const options = e.target.value.split('\n').filter((o) => o.trim());
-                  handlePropertyChange('options', options);
-                }}
-                size="small"
-                fullWidth
-                multiline
-                rows={4}
-                sx={{ mt: 0.5 }}
-              />
-            </Box>
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={componentWithProps.props?.multiple || false}
-                  onChange={(e) => handlePropertyChange('multiple', e.target.checked)}
-                  size="small"
-                />
-              }
-              label="Multiple Selection"
-              sx={{ mt: 0.75 }}
-            />
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={componentWithProps.props?.freeSolo || false}
-                  onChange={(e) => handlePropertyChange('freeSolo', e.target.checked)}
-                  size="small"
-                />
-              }
-              label="Free Solo (Allow Custom Input)"
-              sx={{ mt: 0.75 }}
-            />
-          </>
-        );
-
       case 'Wizard':
         return (
           <>
@@ -1361,31 +1349,92 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
               sx={{ mt: 0.75 }}
               helperText="Maximum number of items allowed (leave empty for unlimited)"
             />
-            <TextField
-              label="Data Provider (JSON array or function)"
-              value={
-                typeof componentWithProps.props?.dataProvider === 'string'
-                  ? componentWithProps.props.dataProvider
-                  : Array.isArray(componentWithProps.props?.dataProvider)
-                  ? JSON.stringify(componentWithProps.props.dataProvider, null, 2)
-                  : ''
-              }
-              onChange={(e) => {
-                try {
-                  const parsed = JSON.parse(e.target.value);
-                  handlePropertyChange('dataProvider', parsed);
-                } catch {
-                  // If not valid JSON, treat as function string
-                  handlePropertyChange('dataProvider', e.target.value);
+            <Box sx={{ mt: 1 }}>
+              <Typography variant="caption" sx={{ display: 'block', mb: 0.5, fontWeight: 600 }}>
+                Data Provider (Dataview or Static Data)
+              </Typography>
+              <AutoBrowse
+                value={
+                  componentWithProps.props?.dataProvider && 
+                  typeof componentWithProps.props.dataProvider === 'object' &&
+                  'dataview_id' in componentWithProps.props.dataProvider
+                    ? [componentWithProps.props.dataProvider]
+                    : []
                 }
-              }}
-              size="small"
-              fullWidth
-              multiline
-              rows={4}
-              sx={{ mt: 0.75 }}
-              helperText="Array of data objects or JavaScript function: (data, component) => []"
-            />
+                valueField="dataview_id"
+                labelField="description"
+                dataProvider={dataviewManager.list.getAllLoadedData()}
+                loading={dataviewsLoading}
+                onChange={async (selected) => {
+                  if (selected && selected.length > 0) {
+                    const dataview = selected[0];
+                    handlePropertyChange('dataProvider', {
+                      dataview_id: dataview.id || dataview.dataview_id,
+                      type: 'dataview',
+                    });
+                    
+                    // Auto-load fields
+                    try {
+                      const fields = await dataviewManager.loadDataviewFields(dataview.id || dataview.dataview_id);
+                      setDataviewFields(fields);
+                    } catch (error) {
+                      console.error('Failed to load dataview fields:', error);
+                      setDataviewFields([]);
+                    }
+                  } else {
+                    handlePropertyChange('dataProvider', undefined);
+                    setDataviewFields([]);
+                  }
+                }}
+                onDataviewSelect={async (dataview) => {
+                  // Load fields when dataview is selected
+                  try {
+                    const fields = await dataviewManager.loadDataviewFields(dataview.id || dataview.dataview_id);
+                    setDataviewFields(fields);
+                  } catch (error) {
+                    console.error('Failed to load dataview fields:', error);
+                    setDataviewFields([]);
+                  }
+                }}
+              />
+              {/* Fallback to text input for static data/function */}
+              <TextField
+                label="Or enter static data/function (JSON array or function)"
+                value={
+                  componentWithProps.props?.dataProvider &&
+                  typeof componentWithProps.props.dataProvider === 'object' &&
+                  'dataview_id' in componentWithProps.props.dataProvider
+                    ? ''
+                    : typeof componentWithProps.props?.dataProvider === 'string'
+                    ? componentWithProps.props.dataProvider
+                    : Array.isArray(componentWithProps.props?.dataProvider)
+                    ? JSON.stringify(componentWithProps.props.dataProvider, null, 2)
+                    : ''
+                }
+                onChange={(e) => {
+                  try {
+                    const parsed = JSON.parse(e.target.value);
+                    handlePropertyChange('dataProvider', parsed);
+                    setDataviewFields([]);
+                  } catch {
+                    // If not valid JSON, treat as function string
+                    handlePropertyChange('dataProvider', e.target.value);
+                    setDataviewFields([]);
+                  }
+                }}
+                size="small"
+                fullWidth
+                multiline
+                rows={4}
+                sx={{ mt: 1 }}
+                helperText="Array of data objects or JavaScript function: (data, component) => []"
+                disabled={
+                  componentWithProps.props?.dataProvider &&
+                  typeof componentWithProps.props.dataProvider === 'object' &&
+                  'dataview_id' in componentWithProps.props.dataProvider
+                }
+              />
+            </Box>
             <Box sx={{ mt: 1.5 }}>
               <Typography variant="caption" sx={{ display: 'block', mb: 0.5 }}>
                 Item Render When (Conditional Rendering)
@@ -2022,7 +2071,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
         );
 
       case 'AutoComplete':
-        // Update existing AutoComplete case to include data source configuration
+        // Enhanced AutoComplete case with data source configuration
         return (
           <>
             <TextField

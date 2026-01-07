@@ -22,7 +22,7 @@ const DraggableComponent: React.FC<DraggableComponentProps> = ({ component, chil
   
   const isSelected = selectedComponentId === component.id;
   const dragStartRef = useRef<{ x: number; y: number } | null>(null);
-  const clickTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const clickTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Create custom listeners that only activate on drag handle or after delay
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
@@ -43,11 +43,9 @@ const DraggableComponent: React.FC<DraggableComponentProps> = ({ component, chil
     },
   };
 
-  const style = transform
-    ? {
-        transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
-      }
-    : undefined;
+  // Don't apply transform to the original component - let DragOverlay handle visual feedback
+  // This prevents layout shifts
+  const style = undefined;
 
   // Cleanup timeout on unmount
   useEffect(() => {
@@ -122,21 +120,31 @@ const DraggableComponent: React.FC<DraggableComponentProps> = ({ component, chil
       sx={{
         position: 'relative',
         cursor: 'pointer',
-        opacity: isDragging ? 0.5 : 1,
-        outline: isSelected ? '2px solid' : '2px solid transparent',
-        outlineColor: isSelected ? 'primary.main' : 'transparent',
+        // When dragging, make invisible but maintain exact dimensions and position
+        // Use opacity instead of visibility to prevent layout recalculation
+        opacity: isDragging ? 0 : 1,
+        pointerEvents: isDragging ? 'none' : 'auto',
+        // Critical: Maintain the component's space in the layout flow
+        // Don't use display: none or visibility: hidden as they can cause shifts
+        outline: isSelected && !isDragging ? '2px solid' : '2px solid transparent',
+        outlineColor: isSelected && !isDragging ? 'primary.main' : 'transparent',
         outlineOffset: '2px',
         borderRadius: 1.5,
-        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-        transform: isSelected ? 'scale(1.01)' : 'scale(1)',
-        boxShadow: isSelected ? '0 4px 12px rgba(25, 118, 210, 0.2)' : 'none',
+        // Disable all transitions during drag to prevent layout shifts
+        transition: isDragging ? 'none !important' : 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+        // Never apply transform during drag - let DragOverlay handle it
+        transform: isDragging ? 'none !important' : (isSelected ? 'scale(1.01)' : 'scale(1)'),
+        boxShadow: isSelected && !isDragging ? '0 4px 12px rgba(25, 118, 210, 0.2)' : 'none',
+        // Prevent any layout shifts by maintaining dimensions
+        willChange: isDragging ? 'auto' : 'transform',
+        // Ensure the component doesn't collapse
+        minHeight: 'fit-content',
         '&:hover': {
-          outline: isSelected ? '2px solid' : '2px dashed',
-          outlineColor: isSelected ? 'primary.main' : 'primary.light',
-          transform: isSelected ? 'scale(1.02)' : 'scale(1.01)',
+          outline: isSelected && !isDragging ? '2px solid' : '2px dashed',
+          outlineColor: isSelected && !isDragging ? 'primary.main' : 'primary.light',
+          transform: isDragging ? 'none !important' : (isSelected ? 'scale(1.02)' : 'scale(1.01)'),
           boxShadow: '0 6px 16px rgba(25, 118, 210, 0.15)',
         },
-        ...style,
       }}
       onClick={(e) => {
         e.stopPropagation();

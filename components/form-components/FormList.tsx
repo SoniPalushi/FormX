@@ -12,7 +12,7 @@ import {
 import type { ComponentDefinition } from '../../stores/types';
 import { useFormBuilderStore } from '../../stores/formBuilderStore';
 import { useFormDataStore } from '../../stores/formDataStore';
-import { resolveArrayDataSource } from '../../utils/data/dataSourceResolver';
+import { resolveArrayDataSourceSync } from '../../utils/data/dataSourceResolver';
 
 interface FormListProps {
   component: ComponentDefinition;
@@ -34,9 +34,10 @@ const FormList: React.FC<FormListProps> = ({ component }) => {
                      latestComponent.props?.data || 
                      [];
   
-  // Resolve data from various sources
+  // Resolve data from various sources (sync version for useMemo)
+  // Note: For async sources like dataview references, use useEffect instead
   const items = useMemo(() => {
-    return resolveArrayDataSource({
+    return resolveArrayDataSourceSync({
       source: dataSource,
       formData: data,
       component: latestComponent,

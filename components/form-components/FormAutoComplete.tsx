@@ -3,7 +3,7 @@ import { Autocomplete, TextField, Box } from '@mui/material';
 import type { ComponentDefinition } from '../../stores/types';
 import { useFormBuilderStore } from '../../stores/formBuilderStore';
 import { useFormDataStore } from '../../stores/formDataStore';
-import { resolveArrayDataSource } from '../../utils/data/dataSourceResolver';
+import { resolveArrayDataSourceSync } from '../../utils/data/dataSourceResolver';
 
 interface FormAutoCompleteProps {
   component: ComponentDefinition;
@@ -28,9 +28,10 @@ const FormAutoComplete: React.FC<FormAutoCompleteProps> = ({ component }) => {
                         latestComponent.props?.options || 
                         [];
   
-  // Resolve data from various sources
+  // Resolve data from various sources (sync version for useMemo)
+  // Note: For async sources like dataview references, use useEffect instead
   const options = useMemo(() => {
-    return resolveArrayDataSource({
+    return resolveArrayDataSourceSync({
       source: optionsSource,
       formData: data,
       component: latestComponent,

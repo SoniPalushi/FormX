@@ -80,3 +80,39 @@ export interface PropertyEditorState {
   isOpen: boolean;
 }
 
+// RemoteArray types
+export interface RemoteArrayOptions {
+  recordsPerPage: number;
+  fetchPromise: (params: {
+    startPage: number;
+    recordsPerPage: number;
+    filterData?: any;
+    sortData?: Array<{ field: string; direction: 'asc' | 'desc' }>;
+  }) => Promise<{
+    data: any[];
+    totalRecords: number;
+    totalPages?: number;
+  }>;
+  threshold?: number; // Load next page when this many records from end
+  autoInit?: boolean;
+  filterData?: any;
+  sortData?: Array<{ field: string; direction: 'asc' | 'desc' }>;
+}
+
+// Dataview types
+export interface Dataview {
+  id: string;
+  name: string;
+  description: string;
+  url: string; // OpenAPI YAML URL
+  fields?: string[]; // Cached field names
+}
+
+// API Config types
+export interface APIConfig {
+  baseUrl: string;
+  endpoints: Record<string, string>;
+  headers?: Record<string, string>;
+  timeout?: number;
+}
+
