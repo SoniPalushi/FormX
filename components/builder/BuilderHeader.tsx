@@ -24,7 +24,6 @@ import { useTranslation } from 'react-i18next';
 import { useFormBuilderStore } from '../../stores/formBuilderStore';
 import { useHistoryStore } from '../../stores/historyStore';
 import { downloadPersistedForm, readFormFromFile } from '../../utils/formExport';
-import { downloadAsReactComponent } from '../../utils/formToReact';
 import { useModeStore, useModeActions } from '../../stores/modeStore';
 import { Switch, FormControlLabel, Tooltip } from '@mui/material';
 import SaveFormDialog from './SaveFormDialog';
@@ -64,41 +63,26 @@ const BuilderHeader: React.FC = () => {
     formName: string;
     description?: string;
     author?: string;
-    format: 'persisted' | 'react';
-    reactFormat?: 'tsx' | 'jsx';
   }) => {
     try {
-      if (metadata.format === 'persisted') {
-        // Use PersistedForm format (JSON for database)
-        downloadPersistedForm(
-          components,
-          `${metadata.formName.replace(/[^a-z0-9]/gi, '-').toLowerCase()}.json`,
-          {
-            metadata: {
-              formName: metadata.formName,
-              description: metadata.description,
-              author: metadata.author,
-              formVersion: '1.0', // Initial version
-            },
-            defaultLanguage: 'al', // Albanian as default
-            languages: [
-              { code: 'al', name: 'Albanian' },
-              { code: 'en-US', name: 'English (US)' },
-              { code: 'es-ES', name: 'Spanish (ES)' },
-            ],
-          }
-        );
-      } else {
-        // Export as React component (TSX/JSX)
-        const extension = metadata.reactFormat || 'tsx';
-        const filename = `${metadata.formName.replace(/[^a-z0-9]/gi, '-').toLowerCase()}.${extension}`;
-        downloadAsReactComponent(components, filename, {
-          format: metadata.reactFormat || 'tsx',
-          componentName: metadata.formName.replace(/[^a-zA-Z0-9]/g, ''),
-          useMUI: true,
-          includeTypes: extension === 'tsx',
-        });
-      }
+      // Use PersistedForm format (JSON for database)
+      downloadPersistedForm(
+        components,
+        `${metadata.formName.replace(/[^a-z0-9]/gi, '-').toLowerCase()}.json`,
+        {
+          metadata: {
+            formName: metadata.formName,
+            description: metadata.description,
+            author: metadata.author,
+            formVersion: '1.0', // Initial version
+          },
+          defaultLanguage: 'al', // Albanian as default
+          languages: [
+            { code: 'al', name: 'Albanian' },
+            { code: 'en-US', name: 'English (US)' },
+          ],
+        }
+      );
     } catch (error) {
       alert(`Failed to save form: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }

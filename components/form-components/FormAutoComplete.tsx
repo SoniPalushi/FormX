@@ -45,6 +45,13 @@ const FormAutoComplete: React.FC<FormAutoCompleteProps> = ({ component }) => {
   const fullWidth = latestComponent.props?.fullWidth !== false;
   const multiple = latestComponent.props?.multiple || false;
   const freeSolo = latestComponent.props?.freeSolo || false;
+  
+  // Get dynamic properties
+  const margin = latestComponent.props?.margin;
+  const padding = latestComponent.props?.padding;
+  const width = latestComponent.props?.width;
+  const height = latestComponent.props?.height;
+  const classes = latestComponent.props?.classes || latestComponent.props?.className || [];
 
   // Convert options to proper format if needed
   const formattedOptions = options.map((option: any) => {
@@ -65,8 +72,14 @@ const FormAutoComplete: React.FC<FormAutoCompleteProps> = ({ component }) => {
         borderRadius: 1,
         p: 0.5,
         cursor: 'pointer',
-        width: fullWidth ? '100%' : 'auto',
+        width: width || (fullWidth ? '100%' : 'auto'),
+        height: height || 'auto',
+        margin: margin ? `${margin.top || 0}px ${margin.right || 0}px ${margin.bottom || 0}px ${margin.left || 0}px` : undefined,
+        padding: padding ? `${padding.top || 0}px ${padding.right || 0}px ${padding.bottom || 0}px ${padding.left || 0}px` : undefined,
+        minWidth: width || '300px',
+        minHeight: height || '56px',
       }}
+      className={`form-builder-autocomplete ${Array.isArray(classes) ? classes.join(' ') : classes || ''}`.trim()}
     >
       <Autocomplete
         value={value}

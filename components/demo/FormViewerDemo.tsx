@@ -25,11 +25,10 @@ const FormViewerDemo: React.FC = () => {
 
     const persistedForm = exportAsPersistedForm(components, {
       version: '1',
-      defaultLanguage: 'en-US',
+      defaultLanguage: 'al',
       languages: [
-        { code: 'en-US', name: 'English (US)' },
-        { code: 'es-ES', name: 'Spanish (ES)' },
         { code: 'al', name: 'Albanian' },
+        { code: 'en-US', name: 'English (US)' },
       ],
       metadata: {
         formName: 'Demo Form',

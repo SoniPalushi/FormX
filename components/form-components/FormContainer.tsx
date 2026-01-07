@@ -3,6 +3,7 @@ import { Box, Paper } from '@mui/material';
 import { useDroppable } from '@dnd-kit/core';
 import type { ComponentDefinition } from '../../stores/types';
 import { useFormBuilderStore } from '../../stores/formBuilderStore';
+import { useComponentProperties } from '../../hooks/useComponentProperties';
 import DraggableComponent from '../builder/DraggableComponent';
 
 interface FormContainerProps {
@@ -10,14 +11,10 @@ interface FormContainerProps {
 }
 
 const FormContainer: React.FC<FormContainerProps> = ({ component }) => {
-  // Subscribe to components array to ensure re-render when component updates
-  const components = useFormBuilderStore((state) => state.components);
-  const { selectComponent, selectedComponentId, findComponent } = useFormBuilderStore();
+  const { selectComponent, selectedComponentId } = useFormBuilderStore();
   
-  // Get the latest component data from store
-  const latestComponent = React.useMemo(() => {
-    return findComponent(component.id) || component;
-  }, [component.id, components, findComponent]);
+  // Get dynamic properties using reusable hook
+  const { latestComponent, className, getSxStyles } = useComponentProperties({ component, formMode: false });
   
   const isSelected = selectedComponentId === component.id;
   const { setNodeRef, isOver } = useDroppable({
@@ -48,12 +45,17 @@ const FormContainer: React.FC<FormContainerProps> = ({ component }) => {
           ? '2px dashed #1976d2'
           : '2px solid transparent',
         borderRadius: 1,
-        p: 2,
+        p: latestComponent.props?.padding ? undefined : 2, // Use padding from props if set, otherwise default to 2
         cursor: 'pointer',
-        minHeight: 50,
         bgcolor: isOver ? 'action.hover' : 'background.paper',
         position: 'relative',
+        ...getSxStyles({
+          includeMinDimensions: true,
+          defaultMinWidth: '100%',
+          defaultMinHeight: latestComponent.props?.height || '100px',
+        }),
       }}
+      className={`form-builder-container ${className}`.trim()}
     >
       {latestComponent.children && latestComponent.children.length > 0 ? (
         <Box

@@ -643,6 +643,16 @@ FormX is a **complete, production-ready visual form builder** that:
 
 ## Appendix: Technical Specifications
 
+### A.0 Integration Guide
+
+**For using FormViewer in external projects**, see `FORMVIEWER_INTEGRATION_GUIDE.md` which covers:
+- NPM package distribution
+- Copying runtime code
+- Git submodule approach
+- Required dependencies
+- Usage examples
+- Troubleshooting
+
 ### A.1 Project Structure
 
 ```

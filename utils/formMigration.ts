@@ -163,12 +163,12 @@ function migratePersistedForm(persistedForm: PersistedForm, fromVersion: string)
       migrated.version = '1';
     }
     if (!migrated.defaultLanguage) {
-      migrated.defaultLanguage = 'en-US';
+      migrated.defaultLanguage = 'al';
     }
     if (!migrated.languages) {
       migrated.languages = [
+        { code: 'al', name: 'Albanian' },
         { code: 'en-US', name: 'English (US)' },
-        { code: 'es-ES', name: 'Spanish (ES)' },
       ];
     }
     if (!migrated.localization) {

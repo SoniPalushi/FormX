@@ -2,3 +2,136 @@
   text-align: center;
 }
 
+/* Standard Component Sizes for Builder Mode (Simple Mode Components) */
+/* These classes ensure components have consistent, visible sizes when dropped in the builder */
+
+/* Label Component */
+.form-builder-label {
+  min-width: 300px;
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Heading Component */
+.form-builder-heading {
+  min-width: 300px;
+  min-height: 40px;
+  display: block;
+}
+
+/* Text Input Component */
+.form-builder-text-input {
+  min-width: 300px;
+  min-height: 56px; /* MUI TextField default height */
+}
+
+/* Text Area Component */
+.form-builder-text-area {
+  min-width: 300px;
+  min-height: 120px;
+}
+
+/* Button Component */
+.form-builder-button {
+  min-width: 120px;
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Select / DropDown Component */
+.form-builder-select {
+  min-width: 300px;
+  min-height: 56px; /* MUI Select default height */
+}
+
+/* Checkbox Component */
+.form-builder-checkbox {
+  min-width: 200px;
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Radio Group Component */
+.form-builder-radio-group {
+  min-width: 300px;
+  min-height: 60px;
+  display: block;
+}
+
+/* Toggle Component */
+.form-builder-toggle {
+  min-width: 200px;
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* DateTime Component */
+.form-builder-datetime {
+  min-width: 300px;
+  min-height: 56px;
+}
+
+/* Amount Component */
+.form-builder-amount {
+  min-width: 200px;
+  min-height: 56px;
+}
+
+/* AutoComplete Component */
+.form-builder-autocomplete {
+  min-width: 300px;
+  min-height: 56px;
+}
+
+/* Image Component */
+.form-builder-image {
+  min-width: 200px;
+  min-height: 150px;
+  display: block;
+}
+
+/* Upload Component */
+.form-builder-upload {
+  min-width: 300px;
+  min-height: 100px;
+}
+
+/* Link Component */
+.form-builder-link {
+  min-width: 150px;
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* HRule Component */
+.form-builder-hrule {
+  min-width: 100%;
+  min-height: 2px;
+  display: block;
+}
+
+/* Container Component */
+.form-builder-container {
+  min-width: 100%;
+  min-height: 100px;
+  display: block;
+}
+
+/* Form Component */
+.form-builder-form {
+  min-width: 100%;
+  min-height: 200px;
+  display: block;
+}
+
+/* CreditCard Component */
+.form-builder-credit-card {
+  min-width: 300px;
+  min-height: 200px;
+}

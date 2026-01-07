@@ -405,6 +405,15 @@ export function downloadPersistedForm(
   filename: string = 'form-persisted.json',
   options: {
     version?: string;
+    id?: string;
+    metadata?: {
+      formName?: string;
+      description?: string;
+      author?: string;
+      formVersion?: string;
+      tags?: string[];
+      category?: string;
+    };
     defaultLanguage?: string;
     languages?: Array<{ code: string; name: string }>;
     formValidator?: string;

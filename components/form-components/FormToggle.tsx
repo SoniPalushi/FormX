@@ -8,11 +8,24 @@ interface FormToggleProps {
 }
 
 const FormToggle: React.FC<FormToggleProps> = ({ component }) => {
-  const { selectComponent, selectedComponentId } = useFormBuilderStore();
+  const { selectComponent, selectedComponentId, components, findComponent } = useFormBuilderStore();
   const isSelected = selectedComponentId === component.id;
-  const label = component.props?.label || '';
-  const checked = component.props?.checked || false;
-  const color = component.props?.color || 'primary';
+  
+  // Get latest component from store to ensure real-time updates
+  const latestComponent = React.useMemo(() => {
+    return findComponent(component.id) || component;
+  }, [component.id, components, findComponent]);
+  
+  const label = latestComponent.props?.label || '';
+  const checked = latestComponent.props?.checked || false;
+  const color = latestComponent.props?.color || 'primary';
+  
+  // Get dynamic properties
+  const margin = latestComponent.props?.margin;
+  const padding = latestComponent.props?.padding;
+  const width = latestComponent.props?.width;
+  const height = latestComponent.props?.height;
+  const classes = latestComponent.props?.classes || latestComponent.props?.className || [];
 
   return (
     <Box
@@ -25,8 +38,16 @@ const FormToggle: React.FC<FormToggleProps> = ({ component }) => {
         borderRadius: 1,
         p: 0.5,
         cursor: 'pointer',
-        display: 'inline-block',
+        display: 'inline-flex',
+        alignItems: 'center',
+        width: width || 'auto',
+        height: height || 'auto',
+        margin: margin ? `${margin.top || 0}px ${margin.right || 0}px ${margin.bottom || 0}px ${margin.left || 0}px` : undefined,
+        padding: padding ? `${padding.top || 0}px ${padding.right || 0}px ${padding.bottom || 0}px ${padding.left || 0}px` : undefined,
+        minWidth: width || '200px',
+        minHeight: height || '42px',
       }}
+      className={`form-builder-toggle ${Array.isArray(classes) ? classes.join(' ') : classes || ''}`.trim()}
     >
       <FormControlLabel
         control={<Switch checked={checked} disabled color={color as any} />}

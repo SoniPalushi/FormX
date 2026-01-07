@@ -3,19 +3,18 @@ import { Button, Box } from '@mui/material';
 import type { ComponentDefinition } from '../../stores/types';
 import { useFormBuilderStore } from '../../stores/formBuilderStore';
 import { useFormComponent } from '../../hooks/useFormComponent';
+import { useComponentProperties } from '../../hooks/useComponentProperties';
 
 interface FormButtonProps {
   component: ComponentDefinition;
 }
 
 const FormButton: React.FC<FormButtonProps> = ({ component }) => {
-  const { selectComponent, selectedComponentId, formMode, components, findComponent } = useFormBuilderStore();
+  const { selectComponent, selectedComponentId, formMode } = useFormBuilderStore();
   const isSelected = selectedComponentId === component.id;
   
-  // Get latest component from store to ensure real-time updates
-  const latestComponent = React.useMemo(() => {
-    return findComponent(component.id) || component;
-  }, [component.id, components, findComponent]);
+  // Get dynamic properties using reusable hook
+  const { latestComponent, className, getSxStyles } = useComponentProperties({ component, formMode });
   
   const {
     computedLabel,
@@ -31,9 +30,6 @@ const FormButton: React.FC<FormButtonProps> = ({ component }) => {
   const variant = latestComponent.props?.variant || 'contained';
   const color = latestComponent.props?.color || 'primary';
   const width = latestComponent.props?.width;
-  const margin = latestComponent.props?.margin;
-  const padding = latestComponent.props?.padding;
-  const classes = latestComponent.props?.classes || latestComponent.props?.className || [];
 
   if (!shouldRender) return null;
 
@@ -52,13 +48,18 @@ const FormButton: React.FC<FormButtonProps> = ({ component }) => {
         borderRadius: 1,
         p: formMode ? 0 : 0.5,
         cursor: formMode ? 'default' : 'pointer',
-        display: 'inline-block',
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
         width: width || 'auto',
-        margin: margin ? `${margin.top || 0}px ${margin.right || 0}px ${margin.bottom || 0}px ${margin.left || 0}px` : undefined,
-        padding: padding ? `${padding.top || 0}px ${padding.right || 0}px ${padding.bottom || 0}px ${padding.left || 0}px` : undefined,
-        ...wrapperResponsiveSx,
+        ...getSxStyles({
+          includeMinDimensions: !formMode,
+          defaultMinWidth: '120px',
+          defaultMinHeight: '36px',
+          additionalSx: wrapperResponsiveSx,
+        }),
       }}
-      className={Array.isArray(classes) ? classes.join(' ') : classes}
+      className={`${formMode ? '' : 'form-builder-button'} ${className}`.trim()}
       style={wrapperResponsiveCss ? { ...htmlAttributes, style: wrapperResponsiveCss } : htmlAttributes}
     >
       <Button 

@@ -339,10 +339,10 @@ export class FormConverter {
         category: options.metadata.category,
       } : undefined,
       form: formComponent,
-      defaultLanguage: options.defaultLanguage || 'en-US',
+      defaultLanguage: options.defaultLanguage || 'al',
       languages: options.languages || [
+        { code: 'al', name: 'Albanian' },
         { code: 'en-US', name: 'English (US)' },
-        { code: 'es-ES', name: 'Spanish (ES)' },
       ],
       localization: {},
       actions: options.actions,

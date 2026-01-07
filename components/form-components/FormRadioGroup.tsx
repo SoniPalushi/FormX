@@ -15,12 +15,25 @@ interface FormRadioGroupProps {
 }
 
 const FormRadioGroup: React.FC<FormRadioGroupProps> = ({ component }) => {
-  const { selectComponent, selectedComponentId } = useFormBuilderStore();
+  const { selectComponent, selectedComponentId, components, findComponent } = useFormBuilderStore();
   const isSelected = selectedComponentId === component.id;
-  const label = component.props?.label || '';
-  const value = component.props?.value || '';
-  const options = component.props?.options || [];
-  const row = component.props?.row || false;
+  
+  // Get latest component from store to ensure real-time updates
+  const latestComponent = React.useMemo(() => {
+    return findComponent(component.id) || component;
+  }, [component.id, components, findComponent]);
+  
+  const label = latestComponent.props?.label || '';
+  const value = latestComponent.props?.value || '';
+  const options = latestComponent.props?.options || [];
+  const row = latestComponent.props?.row || false;
+  
+  // Get dynamic properties
+  const margin = latestComponent.props?.margin;
+  const padding = latestComponent.props?.padding;
+  const width = latestComponent.props?.width;
+  const height = latestComponent.props?.height;
+  const classes = latestComponent.props?.classes || latestComponent.props?.className || [];
 
   return (
     <Box
@@ -33,7 +46,15 @@ const FormRadioGroup: React.FC<FormRadioGroupProps> = ({ component }) => {
         borderRadius: 1,
         p: 0.5,
         cursor: 'pointer',
+        display: 'block',
+        width: width || 'auto',
+        height: height || 'auto',
+        margin: margin ? `${margin.top || 0}px ${margin.right || 0}px ${margin.bottom || 0}px ${margin.left || 0}px` : undefined,
+        padding: padding ? `${padding.top || 0}px ${padding.right || 0}px ${padding.bottom || 0}px ${padding.left || 0}px` : undefined,
+        minWidth: width || '300px',
+        minHeight: height || '60px',
       }}
+      className={`form-builder-radio-group ${Array.isArray(classes) ? classes.join(' ') : classes || ''}`.trim()}
     >
       <FormControl disabled>
         {label && <FormLabel>{label}</FormLabel>}

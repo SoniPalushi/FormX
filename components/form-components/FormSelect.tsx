@@ -4,6 +4,7 @@ import type { ComponentDefinition } from '../../stores/types';
 import { useFormBuilderStore } from '../../stores/formBuilderStore';
 import { useFormDataStore } from '../../stores/formDataStore';
 import { useFormComponent } from '../../hooks/useFormComponent';
+import { useComponentProperties } from '../../hooks/useComponentProperties';
 import { ComputedPropertyEvaluator } from '../../utils/properties/computedProperties';
 
 interface FormSelectProps {
@@ -13,6 +14,9 @@ interface FormSelectProps {
 const FormSelect: React.FC<FormSelectProps> = ({ component }) => {
   const { selectComponent, selectedComponentId, formMode } = useFormBuilderStore();
   const isSelected = selectedComponentId === component.id;
+  
+  // Get dynamic properties using reusable hook
+  const { latestComponent, className, getSxStyles } = useComponentProperties({ component, formMode });
   
   const {
     computedLabel,
@@ -32,10 +36,10 @@ const FormSelect: React.FC<FormSelectProps> = ({ component }) => {
     handleFocus,
     handleBlur,
     htmlAttributes,
-  } = useFormComponent({ component, formMode });
+  } = useFormComponent({ component: latestComponent, formMode });
   
   // Support multiple data source types for options
-  const optionsSource = component.props?.optionsSource || component.props?.options;
+  const optionsSource = latestComponent.props?.optionsSource || latestComponent.props?.options;
   // Subscribe to form data for reactive updates
   const formData = useFormDataStore((state) => state.data);
   const { getAllData, getData } = useFormDataStore();
@@ -65,7 +69,7 @@ const FormSelect: React.FC<FormSelectProps> = ({ component }) => {
     // If it's a function (data provider)
     if (typeof optionsSource === 'function') {
       try {
-        const result = optionsSource(formData, component);
+        const result = optionsSource(formData, latestComponent);
         return Array.isArray(result) ? result : [];
       } catch (error) {
         console.error('Error executing optionsSource function:', error);
@@ -87,18 +91,15 @@ const FormSelect: React.FC<FormSelectProps> = ({ component }) => {
     }
     
     return [];
-  }, [optionsSource, component, formData, getData]); // Added formData dependency for reactivity
+  }, [optionsSource, latestComponent, formData, getData]); // Added formData dependency for reactivity
   
-  const variant = component.props?.variant || 'outlined';
-  const fullWidth = component.props?.fullWidth !== false;
-  const required = component.props?.required || false;
-  const disabled = component.props?.disabled || false;
-  const multiple = component.props?.multiple || false;
-  const size = component.props?.size || 'medium';
-  const margin = component.props?.margin;
-  const padding = component.props?.padding;
-  const width = component.props?.width;
-  const classes = component.props?.classes || component.props?.className || [];
+  const variant = latestComponent.props?.variant || 'outlined';
+  const fullWidth = latestComponent.props?.fullWidth !== false;
+  const required = latestComponent.props?.required || false;
+  const disabled = latestComponent.props?.disabled || false;
+  const multiple = latestComponent.props?.multiple || false;
+  const size = latestComponent.props?.size || 'medium';
+  const width = latestComponent.props?.width;
 
   // Default to fullWidth if not explicitly set and no width specified
   const calculatedWidth = width || (fullWidth ? '100%' : (formMode ? '100%' : '300px'));
@@ -124,11 +125,14 @@ const FormSelect: React.FC<FormSelectProps> = ({ component }) => {
         p: formMode ? 0 : 0.5,
         cursor: formMode ? 'default' : 'pointer',
         width: calculatedWidth,
-        margin: margin ? `${margin.top || 0}px ${margin.right || 0}px ${margin.bottom || 0}px ${margin.left || 0}px` : undefined,
-        padding: padding ? `${padding.top || 0}px ${padding.right || 0}px ${padding.bottom || 0}px ${padding.left || 0}px` : undefined,
-        ...wrapperResponsiveSx,
+        ...getSxStyles({
+          includeMinDimensions: !formMode,
+          defaultMinWidth: '300px',
+          defaultMinHeight: '56px',
+          additionalSx: wrapperResponsiveSx,
+        }),
       }}
-      className={Array.isArray(classes) ? classes.join(' ') : classes}
+      className={`${formMode ? '' : 'form-builder-select'} ${className}`.trim()}
       style={wrapperResponsiveCss ? { ...htmlAttributes, style: wrapperResponsiveCss } : htmlAttributes}
     >
       <FormControl 

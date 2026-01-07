@@ -3,6 +3,7 @@ import { TextField, Box, InputAdornment } from '@mui/material';
 import type { ComponentDefinition } from '../../stores/types';
 import { useFormBuilderStore } from '../../stores/formBuilderStore';
 import { useFormComponent } from '../../hooks/useFormComponent';
+import { useComponentProperties } from '../../hooks/useComponentProperties';
 
 interface FormAmountProps {
   component: ComponentDefinition;
@@ -11,6 +12,9 @@ interface FormAmountProps {
 const FormAmount: React.FC<FormAmountProps> = ({ component }) => {
   const { selectComponent, selectedComponentId, formMode } = useFormBuilderStore();
   const isSelected = selectedComponentId === component.id;
+  
+  // Get dynamic properties using reusable hook
+  const { latestComponent, className, getSxStyles } = useComponentProperties({ component, formMode });
   
   const {
     computedLabel,
@@ -31,19 +35,16 @@ const FormAmount: React.FC<FormAmountProps> = ({ component }) => {
     handleFocus,
     handleBlur,
     htmlAttributes,
-  } = useFormComponent({ component, formMode });
+  } = useFormComponent({ component: latestComponent, formMode });
   
-  const currency = component.props?.currency || component.props?.currencySymbol || '$';
-  const variant = component.props?.variant || 'outlined';
-  const fullWidth = component.props?.fullWidth !== false;
-  const required = component.props?.required || false;
-  const disabled = component.props?.disabled || false;
-  const decimalPlaces = component.props?.decimalPlaces ?? 2;
-  const size = component.props?.size || 'medium';
-  const margin = component.props?.margin;
-  const padding = component.props?.padding;
-  const width = component.props?.width;
-  const classes = component.props?.classes || component.props?.className || [];
+  const currency = latestComponent.props?.currency || latestComponent.props?.currencySymbol || '$';
+  const variant = latestComponent.props?.variant || 'outlined';
+  const fullWidth = latestComponent.props?.fullWidth !== false;
+  const required = latestComponent.props?.required || false;
+  const disabled = latestComponent.props?.disabled || false;
+  const decimalPlaces = latestComponent.props?.decimalPlaces ?? 2;
+  const size = latestComponent.props?.size || 'medium';
+  const width = latestComponent.props?.width;
   
   const calculatedWidth = width || (fullWidth ? '100%' : 'auto');
   const displayValue = formMode ? boundValue : computedValue;
@@ -68,11 +69,14 @@ const FormAmount: React.FC<FormAmountProps> = ({ component }) => {
         p: formMode ? 0 : 0.5,
         cursor: formMode ? 'default' : 'pointer',
         width: calculatedWidth,
-        margin: margin ? `${margin.top || 0}px ${margin.right || 0}px ${margin.bottom || 0}px ${margin.left || 0}px` : undefined,
-        padding: padding ? `${padding.top || 0}px ${padding.right || 0}px ${padding.bottom || 0}px ${padding.left || 0}px` : undefined,
-        ...wrapperResponsiveSx,
+        ...getSxStyles({
+          includeMinDimensions: !formMode,
+          defaultMinWidth: '200px',
+          defaultMinHeight: '56px',
+          additionalSx: wrapperResponsiveSx,
+        }),
       }}
-      className={Array.isArray(classes) ? classes.join(' ') : classes}
+      className={`${formMode ? '' : 'form-builder-amount'} ${className}`.trim()}
       style={wrapperResponsiveCss ? { ...htmlAttributes, style: wrapperResponsiveCss } : htmlAttributes}
     >
       <TextField

@@ -8,14 +8,8 @@ import {
   TextField,
   Box,
   Typography,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  ToggleButtonGroup,
-  ToggleButton,
 } from '@mui/material';
-import { Save as SaveIcon, Code as CodeIcon, Storage as StorageIcon } from '@mui/icons-material';
+import { Save as SaveIcon } from '@mui/icons-material';
 
 interface SaveFormDialogProps {
   open: boolean;
@@ -24,8 +18,6 @@ interface SaveFormDialogProps {
     formName: string;
     description?: string;
     author?: string;
-    format: 'persisted' | 'react';
-    reactFormat?: 'tsx' | 'jsx';
   }) => void;
   defaultFormName?: string;
 }
@@ -39,8 +31,6 @@ const SaveFormDialog: React.FC<SaveFormDialogProps> = ({
   const [formName, setFormName] = useState(defaultFormName);
   const [description, setDescription] = useState('');
   const [author, setAuthor] = useState('');
-  const [format, setFormat] = useState<'persisted' | 'react'>('persisted');
-  const [reactFormat, setReactFormat] = useState<'tsx' | 'jsx'>('tsx');
 
   const handleSave = () => {
     if (!formName.trim()) {
@@ -52,16 +42,12 @@ const SaveFormDialog: React.FC<SaveFormDialogProps> = ({
       formName: formName.trim(),
       description: description.trim() || undefined,
       author: author.trim() || undefined,
-      format,
-      reactFormat: format === 'react' ? reactFormat : undefined,
     });
 
     // Reset form
     setFormName(defaultFormName);
     setDescription('');
     setAuthor('');
-    setFormat('persisted');
-    setReactFormat('tsx');
     onClose();
   };
 
@@ -70,8 +56,6 @@ const SaveFormDialog: React.FC<SaveFormDialogProps> = ({
     setFormName(defaultFormName);
     setDescription('');
     setAuthor('');
-    setFormat('persisted');
-    setReactFormat('tsx');
     onClose();
   };
 
@@ -117,60 +101,6 @@ const SaveFormDialog: React.FC<SaveFormDialogProps> = ({
             size="small"
             helperText="Optional: Your name or identifier"
           />
-
-          <FormControl fullWidth size="small">
-            <InputLabel>Save Format</InputLabel>
-            <Select
-              value={format}
-              label="Save Format"
-              onChange={(e) => setFormat(e.target.value as 'persisted' | 'react')}
-            >
-              <MenuItem value="persisted">
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <StorageIcon fontSize="small" />
-                  <Box>
-                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                      JSON (Database Storage)
-                    </Typography>
-                    <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                      PersistedForm format - Save to database
-                    </Typography>
-                  </Box>
-                </Box>
-              </MenuItem>
-              <MenuItem value="react">
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <CodeIcon fontSize="small" />
-                  <Box>
-                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                      React Component (TSX/JSX)
-                    </Typography>
-                    <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                      Export as React component for use in other projects
-                    </Typography>
-                  </Box>
-                </Box>
-              </MenuItem>
-            </Select>
-          </FormControl>
-
-          {format === 'react' && (
-            <Box>
-              <Typography variant="caption" sx={{ display: 'block', mb: 1, color: 'text.secondary' }}>
-                React Format
-              </Typography>
-              <ToggleButtonGroup
-                value={reactFormat}
-                exclusive
-                onChange={(_, value) => value && setReactFormat(value)}
-                size="small"
-                fullWidth
-              >
-                <ToggleButton value="tsx">TypeScript (TSX)</ToggleButton>
-                <ToggleButton value="jsx">JavaScript (JSX)</ToggleButton>
-              </ToggleButtonGroup>
-            </Box>
-          )}
         </Box>
       </DialogContent>
       <DialogActions sx={{ px: 2, pb: 2 }}>
