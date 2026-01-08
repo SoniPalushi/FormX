@@ -12,7 +12,7 @@ import { ComputedPropertyEvaluator } from '../utils/properties/computedPropertie
 import { ConditionalRenderer } from '../utils/rendering/conditionalRendering';
 import { ResponsiveStyleResolver } from '../utils/styles/responsiveStyles';
 import type { ComponentDefinition } from '../stores/types';
-import type { ComponentProperty, ActionData, ValidationSchema } from '../stores/types/formEngine';
+import type { ComponentProperty, ActionData, ValidationSchema, ActionEventArgs, ComponentStore } from '../stores/types/formEngine';
 
 interface UseFormComponentOptions {
   component: ComponentDefinition;
@@ -247,6 +247,29 @@ export function useFormComponent({ component, formMode = false }: UseFormCompone
     return result;
   }, [latestComponent.props?.htmlAttributes, data, evaluateProperty]); // Add data dependency for reactive updates
   
+  // Helper function to convert ComponentDefinition to ComponentStore for ActionEventArgs
+  const componentToStore = useCallback((component: ComponentDefinition): ComponentStore => {
+    return {
+      key: component.id,
+      dataKey: component.props?.dataKey as string | undefined,
+      type: component.type,
+      props: (component.props || {}) as Record<string, ComponentProperty>,
+      events: component.props?.events as Record<string, ActionData[]> | undefined,
+      schema: component.props?.schema as ValidationSchema | undefined,
+      css: component.props?.css as any,
+      wrapperCss: component.props?.wrapperCss as any,
+      style: component.props?.style as any,
+      wrapperStyle: component.props?.wrapperStyle as any,
+      htmlAttributes: component.props?.htmlAttributes as any,
+      tooltipProps: component.props?.tooltipProps as any,
+      modal: component.props?.modal as any,
+      slot: component.props?.slot as string | undefined,
+      slotCondition: component.props?.slotCondition as string | undefined,
+      renderWhen: component.props?.renderWhen as ComponentProperty<boolean> | undefined,
+      disableDataBinding: component.props?.disableDataBinding as ComponentProperty<boolean> | undefined,
+    };
+  }, []);
+  
   // Event handlers
   const handleChange = useCallback(async (value: any) => {
     setBoundValue(value);
@@ -259,46 +282,63 @@ export function useFormComponent({ component, formMode = false }: UseFormCompone
       const events = latestComponent.props?.events as Record<string, ActionData[]> | undefined;
       const onChangeActions = events?.onChange;
       if (onChangeActions && onChangeActions.length > 0) {
-        const eventArgs = {
-          component: latestComponent as any,
-          data,
+        const sender = componentToStore(latestComponent);
+        const eventArgs: ActionEventArgs = {
+          type: 'onChange',
+          sender,
+          store: useFormDataStore.getState(),
+          args: [value],
+          renderedProps: latestComponent.props || {},
           value,
-          event: { type: 'change', value },
+          data,
+          rootData: data,
         };
         await ActionHandler.executeActions(onChangeActions, eventArgs);
       }
     }
-  }, [formMode, setBoundValue, validateValue, latestComponent, data]);
+  }, [formMode, setBoundValue, validateValue, latestComponent, data, componentToStore]);
   
   const handleClick = useCallback(async (event: React.MouseEvent) => {
     if (formMode) {
       const events = latestComponent.props?.events as Record<string, ActionData[]> | undefined;
       const onClickActions = events?.onClick;
       if (onClickActions && onClickActions.length > 0) {
-        const eventArgs = {
-          component: latestComponent as any,
+        const sender = componentToStore(latestComponent);
+        const eventArgs: ActionEventArgs = {
+          type: 'onClick',
+          sender,
+          store: useFormDataStore.getState(),
+          args: [event],
+          renderedProps: latestComponent.props || {},
+          event,
           data,
-          event: { type: 'click', nativeEvent: event },
+          rootData: data,
         };
         await ActionHandler.executeActions(onClickActions, eventArgs);
       }
     }
-  }, [formMode, latestComponent, data]);
+  }, [formMode, latestComponent, data, componentToStore]);
   
   const handleFocus = useCallback(async (event: React.FocusEvent) => {
     if (formMode) {
       const events = latestComponent.props?.events as Record<string, ActionData[]> | undefined;
       const onFocusActions = events?.onFocus;
       if (onFocusActions && onFocusActions.length > 0) {
-        const eventArgs = {
-          component: latestComponent as any,
+        const sender = componentToStore(latestComponent);
+        const eventArgs: ActionEventArgs = {
+          type: 'onFocus',
+          sender,
+          store: useFormDataStore.getState(),
+          args: [event],
+          renderedProps: latestComponent.props || {},
+          event,
           data,
-          event: { type: 'focus', nativeEvent: event },
+          rootData: data,
         };
         await ActionHandler.executeActions(onFocusActions, eventArgs);
       }
     }
-  }, [formMode, latestComponent, data]);
+  }, [formMode, latestComponent, data, componentToStore]);
   
   const handleBlur = useCallback(async (event: React.FocusEvent) => {
     if (formMode) {
@@ -308,15 +348,21 @@ export function useFormComponent({ component, formMode = false }: UseFormCompone
       const events = latestComponent.props?.events as Record<string, ActionData[]> | undefined;
       const onBlurActions = events?.onBlur;
       if (onBlurActions && onBlurActions.length > 0) {
-        const eventArgs = {
-          component: latestComponent as any,
+        const sender = componentToStore(latestComponent);
+        const eventArgs: ActionEventArgs = {
+          type: 'onBlur',
+          sender,
+          store: useFormDataStore.getState(),
+          args: [event],
+          renderedProps: latestComponent.props || {},
+          event,
           data,
-          event: { type: 'blur', nativeEvent: event },
+          rootData: data,
         };
         await ActionHandler.executeActions(onBlurActions, eventArgs);
       }
     }
-  }, [formMode, computedValue, validateValue, latestComponent, data]);
+  }, [formMode, computedValue, validateValue, latestComponent, data, componentToStore]);
   
   return {
     computedLabel,

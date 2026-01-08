@@ -20,9 +20,11 @@ export class APIConfigManager {
 
   constructor(config?: Partial<APIConfig>) {
     this.config = {
-      baseUrl: import.meta.env.VITE_API_BASE_URL || '/api',
+      // Përdor Cloudflare Worker URL për testim, ose environment variable
+      baseUrl: import.meta.env.VITE_API_BASE_URL || 'https://raspy-hill-b911.soncekreatx.workers.dev',
       endpoints: {
-        dataviews: '/dataviews',
+        dataviews: '/api/dataviews',
+        dataviewData: '/api/dataviews', // Base path, will append /{id}/data
         forms: '/forms',
       },
       headers: {

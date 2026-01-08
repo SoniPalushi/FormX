@@ -6,6 +6,7 @@ import { useFormDataStore } from '../../stores/formDataStore';
 import { useFormComponent } from '../../hooks/useFormComponent';
 import { useComponentProperties } from '../../hooks/useComponentProperties';
 import { ComputedPropertyEvaluator } from '../../utils/properties/computedProperties';
+import { useBuilderDataStore } from '../../stores/builderDataStore';
 
 interface FormSelectProps {
   component: ComponentDefinition;
@@ -43,10 +44,31 @@ const FormSelect: React.FC<FormSelectProps> = ({ component }) => {
   // Subscribe to form data for reactive updates
   const formData = useFormDataStore((state) => state.data);
   const { getAllData, getData } = useFormDataStore();
+  const { getDataviewData } = useBuilderDataStore();
   
   const options = React.useMemo(() => {
     if (!optionsSource) return [];
     
+    // Në builder mode, nëse optionsSource është dataview reference (string), merr të dhënat nga builder store
+    if (!formMode && typeof optionsSource === 'string' && optionsSource) {
+      const builderData = getDataviewData(optionsSource);
+      if (builderData && Array.isArray(builderData)) {
+        // Shfaq të dhënat aktuale për preview në builder
+        const valueField = latestComponent.props?.valueField || 'id';
+        const labelField = latestComponent.props?.labelField || 'name';
+        
+        return builderData.map((item: any) => {
+          const value = item[valueField] !== undefined ? item[valueField] : item.id;
+          const label = item[labelField] !== undefined ? item[labelField] : item.name || value || String(item);
+          
+          return typeof item === 'string' 
+            ? item 
+            : { value, label };
+        });
+      }
+    }
+    
+    // Form mode ose static data - logjika ekzistuese
     // If it's already an array, use it directly
     if (Array.isArray(optionsSource)) {
       return optionsSource;
@@ -77,8 +99,26 @@ const FormSelect: React.FC<FormSelectProps> = ({ component }) => {
       }
     }
     
-    // If it's a string (could be JSON or dataKey)
+    // If it's a string (could be JSON, dataKey, or dataview reference)
     if (typeof optionsSource === 'string') {
+      // Në form mode, kontrollo dataview reference
+      if (formMode) {
+        const builderData = getDataviewData(optionsSource);
+        if (builderData && Array.isArray(builderData)) {
+          const valueField = latestComponent.props?.valueField || 'id';
+          const labelField = latestComponent.props?.labelField || 'name';
+          
+          return builderData.map((item: any) => {
+            const value = item[valueField] !== undefined ? item[valueField] : item.id;
+            const label = item[labelField] !== undefined ? item[labelField] : item.name || value || String(item);
+            
+            return typeof item === 'string' 
+              ? item 
+              : { value, label };
+          });
+        }
+      }
+      
       try {
         // Try parsing as JSON first
         const parsed = JSON.parse(optionsSource);
@@ -91,7 +131,7 @@ const FormSelect: React.FC<FormSelectProps> = ({ component }) => {
     }
     
     return [];
-  }, [optionsSource, latestComponent, formData, getData]); // Added formData dependency for reactivity
+  }, [optionsSource, latestComponent, formData, getData, formMode, getDataviewData]); // Added formMode and getDataviewData dependencies
   
   const variant = latestComponent.props?.variant || 'outlined';
   const fullWidth = latestComponent.props?.fullWidth !== false;

@@ -13,6 +13,7 @@ import type { ComponentDefinition } from '../../stores/types';
 import { useFormBuilderStore } from '../../stores/formBuilderStore';
 import { useFormDataStore } from '../../stores/formDataStore';
 import { resolveArrayDataSourceSync } from '../../utils/data/dataSourceResolver';
+import { useBuilderDataStore } from '../../stores/builderDataStore';
 
 interface FormListProps {
   component: ComponentDefinition;
@@ -35,8 +36,18 @@ const FormList: React.FC<FormListProps> = ({ component }) => {
                      [];
   
   // Resolve data from various sources (sync version for useMemo)
-  // Note: For async sources like dataview references, use useEffect instead
+  // Në builder mode, nëse dataSource është dataview reference (string), merr të dhënat nga builder store
   const items = useMemo(() => {
+    // Në builder mode, kontrollo dataview reference
+    if (!formMode && typeof dataSource === 'string' && dataSource) {
+      const builderData = getDataviewData(dataSource);
+      if (builderData && Array.isArray(builderData)) {
+        // Shfaq të dhënat aktuale për preview në builder
+        return builderData;
+      }
+    }
+    
+    // Form mode ose static data - logjika ekzistuese
     return resolveArrayDataSourceSync({
       source: dataSource,
       formData: data,
@@ -44,7 +55,7 @@ const FormList: React.FC<FormListProps> = ({ component }) => {
       getAllData,
       getData,
     });
-  }, [dataSource, data, latestComponent, getAllData, getData]);
+  }, [dataSource, data, latestComponent, getAllData, getData, formMode, getDataviewData]);
   
   const label = latestComponent.props?.label || 'List';
   const dense = latestComponent.props?.dense || false;

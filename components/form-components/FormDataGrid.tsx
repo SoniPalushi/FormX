@@ -14,6 +14,7 @@ import type { ComponentDefinition } from '../../stores/types';
 import { useFormBuilderStore } from '../../stores/formBuilderStore';
 import { useFormDataStore } from '../../stores/formDataStore';
 import { resolveArrayDataSource, resolveArrayDataSourceSync } from '../../utils/data/dataSourceResolver';
+import { useBuilderDataStore } from '../../stores/builderDataStore';
 
 interface FormDataGridProps {
   component: ComponentDefinition;
@@ -22,6 +23,7 @@ interface FormDataGridProps {
 const FormDataGrid: React.FC<FormDataGridProps> = ({ component }) => {
   const { selectComponent, selectedComponentId, formMode, findComponent, components } = useFormBuilderStore();
   const { data, getAllData, getData } = useFormDataStore();
+  const { getDataviewData } = useBuilderDataStore();
   const isSelected = selectedComponentId === component.id;
 
   // Get latest component - subscribe to components array for real-time updates
@@ -55,8 +57,18 @@ const FormDataGrid: React.FC<FormDataGridProps> = ({ component }) => {
   }, [latestComponent.props?.dataSource, latestComponent.props?.rows, latestComponent.props?.data]);
   
   // Resolve data from various sources (sync version for useMemo)
-  // Note: For async sources like dataview references, use useEffect instead
+  // Në builder mode, nëse dataSource është dataview reference (string), merr të dhënat nga builder store
   const rows = useMemo(() => {
+    // Në builder mode, kontrollo dataview reference
+    if (!formMode && typeof dataSource === 'string' && dataSource) {
+      const builderData = getDataviewData(dataSource);
+      if (builderData && Array.isArray(builderData)) {
+        // Shfaq të dhënat aktuale për preview në builder
+        return builderData;
+      }
+    }
+    
+    // Form mode ose static data - logjika ekzistuese
     return resolveArrayDataSourceSync({
       source: dataSource,
       formData: data,
@@ -64,7 +76,7 @@ const FormDataGrid: React.FC<FormDataGridProps> = ({ component }) => {
       getAllData,
       getData,
     });
-  }, [dataSource, data, latestComponent, getAllData, getData]);
+  }, [dataSource, data, latestComponent, getAllData, getData, formMode, getDataviewData]);
   
   const label = latestComponent.props?.label || 'Data Grid';
 

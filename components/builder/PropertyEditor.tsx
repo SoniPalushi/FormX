@@ -16,7 +16,7 @@ import {
   AccordionSummary,
   AccordionDetails,
 } from '@mui/material';
-import { ExpandMore as ExpandMoreIcon, Delete as DeleteIcon, ContentCopy as DuplicateIcon } from '@mui/icons-material';
+import { ExpandMore as ExpandMoreIcon, Delete as DeleteIcon, ContentCopy as DuplicateIcon, Code as CodeIcon } from '@mui/icons-material';
 import type { ComponentDefinition } from '../../stores/types';
 import { useHistoryStore } from '../../stores/historyStore';
 import { CommonPropertiesEditor } from './CommonPropertiesEditor';
@@ -29,6 +29,8 @@ import AutoBrowse from './AutoBrowse';
 // Import store directly for getState()
 import { useFormBuilderStore } from '../../stores/formBuilderStore';
 import { getDataviewManager } from '../../utils/dataviews/dataviewManager';
+import { openAPIUtils } from '../../utils/api/openApiUtils';
+import { useBuilderDataStore } from '../../stores/builderDataStore';
 import { useModeStore } from '../../stores/modeStore';
 import { DATA_SOURCE_TYPES_CLASSIFICATION, COMPONENT_PROPERTIES_CLASSIFICATION, SECTIONS_CLASSIFICATION, isFeatureAvailable } from '../../utils/modes/featureClassification';
 
@@ -48,6 +50,9 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
   const [dataviewManager] = useState(() => getDataviewManager());
   const [dataviewsLoading, setDataviewsLoading] = useState(false);
   const [dataviewFields, setDataviewFields] = useState<string[]>([]);
+  const [dataviewsList, setDataviewsList] = useState<any[]>([]);
+  const [selectedDataviewResponse, setSelectedDataviewResponse] = useState<any>(null);
+  const { setDataviewData, getDataviewData } = useBuilderDataStore();
   
   // Load dataviews list on mount
   useEffect(() => {
@@ -55,18 +60,33 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
       try {
         setDataviewsLoading(true);
         await dataviewManager.list.init();
+        // Update state with loaded dataviews for reactivity
+        const loadedData = dataviewManager.list.getAllLoadedData();
+        setDataviewsList(loadedData);
+        console.log('Loaded dataviews:', loadedData.length, loadedData);
       } catch (error) {
-        // Silently fail if API is not available - system works without dataviews
-        // Only log in development mode
-        if (process.env.NODE_ENV === 'development') {
-          console.warn('Dataviews API not available. System will work without dataviews feature.', error);
-        }
+        // Log error for debugging
+        console.error('Failed to load dataviews list:', error);
+        setDataviewsList([]);
       } finally {
         setDataviewsLoading(false);
       }
     };
     loadDataviews();
   }, [dataviewManager]);
+  
+  // Subscribe to dataviews list changes (if RemoteArray emits events)
+  useEffect(() => {
+    // Refresh list periodically or when needed
+    const interval = setInterval(() => {
+      const currentData = dataviewManager.list.getAllLoadedData();
+      if (currentData.length !== dataviewsList.length) {
+        setDataviewsList(currentData);
+      }
+    }, 1000); // Check every second
+    
+    return () => clearInterval(interval);
+  }, [dataviewManager, dataviewsList.length]);
 
   // Get the latest component data from store to ensure we have updated props
   const latestComponent = useMemo(() => {
@@ -231,6 +251,85 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
       />
     );
   };
+
+  // Helper function to detect source type for optionsSource/dataSource
+  const detectSourceType = useCallback((source: any, propertyKey: 'optionsSource' | 'dataSource' = 'optionsSource'): 'static' | 'function' | 'computed' | 'dataKey' | 'dataview' => {
+    // Check if it's undefined or null - default to static
+    if (source === undefined || source === null) {
+      return 'static';
+    }
+    
+    // Check if it's a dataview object
+    if (typeof source === 'object' && !Array.isArray(source) && source !== null && 'dataview_id' in source) {
+      return 'dataview';
+    }
+    
+    // Check if it's a special marker for dataview pending selection
+    if (source === '__DATAVIEW_PENDING__') {
+      return 'dataview';
+    }
+    
+    // Check if it's a string dataview reference (from builder store)
+    if (typeof source === 'string' && source !== '' && 
+        !source.includes('=>') && !source.includes('function') && 
+        !source.startsWith('(') &&
+        (getDataviewData(source) || dataviewsList.some((dv: any) => (dv.id || dv.dataview_id) === source))) {
+      return 'dataview';
+    }
+    
+    // Check if it's a function
+    if (typeof source === 'function') {
+      return 'function';
+    }
+    
+    // Check if it's a computed property object
+    if (typeof source === 'object' && !Array.isArray(source) && source !== null && 'computeType' in source) {
+      return 'computed';
+    }
+    
+    // Check if it's an array (static)
+    if (Array.isArray(source)) {
+      return 'static';
+    }
+    
+    // Check if it's a string (could be function code, function name, dataKey, or empty string)
+    if (typeof source === 'string') {
+      // Empty string means it's being set up
+      if (source === '') {
+        // For dataSource, empty string could be dataKey being set up
+        // For optionsSource, empty string could be dataKey being set up
+        return 'dataKey';
+      }
+      
+      // Try to parse as JSON to see if it's an array (for dataSource)
+      if (propertyKey === 'dataSource') {
+        try {
+          const parsed = JSON.parse(source);
+          if (Array.isArray(parsed)) {
+            return 'static';
+          }
+        } catch {
+          // Not valid JSON, continue checking
+        }
+      }
+      
+      // Check if it looks like a function name (simple identifier) - for dataSource
+      if (propertyKey === 'dataSource' && source.match(/^[a-zA-Z_$][a-zA-Z0-9_$]*$/)) {
+        return 'function';
+      }
+      
+      // If it looks like function code (contains => or function), it's a function
+      if (source.includes('=>') || source.includes('function') || source.startsWith('(')) {
+        return 'function';
+      }
+      
+      // Otherwise it's a dataKey
+      return 'dataKey';
+    }
+    
+    // Default to static
+    return 'static';
+  }, [dataviewsList, getDataviewData]);
 
   const renderComponentSpecificFields = () => {
     switch (componentWithProps.type) {
@@ -548,53 +647,54 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
                 <Select
                   key={`source-type-select-${componentWithProps.id}-${JSON.stringify(componentWithProps.props?.optionsSource)}`}
                   labelId={`source-type-label-${componentWithProps.id}`}
-                  value={(() => {
-                    const optionsSource = componentWithProps.props?.optionsSource;
-                    // Check if it's a function
-                    if (typeof optionsSource === 'function') {
-                      return 'function';
-                    }
-                    // Check if it's a computed property object
-                    if (typeof optionsSource === 'object' && optionsSource !== null && 'computeType' in optionsSource) {
-                      return 'computed';
-                    }
-                    // Check if it's a string (could be function code or dataKey)
-                    if (typeof optionsSource === 'string' && optionsSource !== '') {
-                      // If it looks like function code (contains => or function), it's a function
-                      if (optionsSource.includes('=>') || optionsSource.includes('function') || optionsSource.startsWith('(')) {
-                        return 'function';
-                      }
-                      // Otherwise it's a dataKey
-                      return 'dataKey';
-                    }
-                    // Default to static
-                    return 'static';
-                  })()}
+                  value={detectSourceType(componentWithProps.props?.optionsSource, 'optionsSource')}
                   label="Source Type"
                   onChange={(e) => {
                     e.stopPropagation();
                     const newValue = e.target.value;
+                    const currentOptionsSource = componentWithProps.props?.optionsSource;
+                    
                     // If switching to advanced type but advanced mode is off, reset to static
                     if ((newValue === 'function' || newValue === 'computed') && !advancedMode) {
                       handlePropertyChange('optionsSource', undefined);
                       return;
                     }
+                    
                     if (newValue === 'static') {
                       // Clear optionsSource to use static options
                       handlePropertyChange('optionsSource', undefined);
+                      setSelectedDataviewResponse(null);
+                      setDataviewFields([]);
+                    } else if (newValue === 'dataview') {
+                      // Only set marker if not already a dataview
+                      const currentType = detectSourceType(currentOptionsSource, 'optionsSource');
+                      if (currentType !== 'dataview') {
+                        handlePropertyChange('optionsSource', '__DATAVIEW_PENDING__');
+                      }
                     } else if (newValue === 'function') {
                       // Set as string first, will be converted to function when user enters code
                       handlePropertyChange('optionsSource', '(data, component) => { return []; }');
+                      setSelectedDataviewResponse(null);
+                      setDataviewFields([]);
                     } else if (newValue === 'computed') {
                       handlePropertyChange('optionsSource', { computeType: 'function', fnSource: 'return [];' });
+                      setSelectedDataviewResponse(null);
+                      setDataviewFields([]);
                     } else if (newValue === 'dataKey') {
-                      handlePropertyChange('optionsSource', '');
+                      // Only set empty string if not already a dataKey
+                      const currentType = detectSourceType(currentOptionsSource, 'optionsSource');
+                      if (currentType !== 'dataKey') {
+                        handlePropertyChange('optionsSource', '');
+                      }
+                      setSelectedDataviewResponse(null);
+                      setDataviewFields([]);
                     }
                   }}
                   onClick={(e) => e.stopPropagation()}
                   onMouseDown={(e) => e.stopPropagation()}
                 >
                   <MenuItem value="static">Static Array</MenuItem>
+                  <MenuItem value="dataview">Dataview</MenuItem>
                   {isFeatureAvailable('function', DATA_SOURCE_TYPES_CLASSIFICATION, advancedMode) && (
                     <MenuItem value="function">Function (Data Provider)</MenuItem>
                   )}
@@ -606,29 +706,282 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
               </FormControl>
               
               {(() => {
+                const sourceType = detectSourceType(componentWithProps.props?.optionsSource, 'optionsSource');
                 const optionsSource = componentWithProps.props?.optionsSource;
-                let sourceType: string;
-                // Check if it's a function
-                if (typeof optionsSource === 'function') {
-                  sourceType = 'function';
-                }
-                // Check if it's a computed property object
-                else if (typeof optionsSource === 'object' && optionsSource !== null && 'computeType' in optionsSource) {
-                  sourceType = 'computed';
-                }
-                // Check if it's a string (could be function code or dataKey)
-                else if (typeof optionsSource === 'string' && optionsSource !== '') {
-                  // If it looks like function code (contains => or function), it's a function
-                  if (optionsSource.includes('=>') || optionsSource.includes('function') || optionsSource.startsWith('(')) {
-                    sourceType = 'function';
-                  } else {
-                    // Otherwise it's a dataKey
-                    sourceType = 'dataKey';
-                  }
-                }
-                // Default to static
-                else {
-                  sourceType = 'static';
+                
+                // Show AutoBrowse when source type is dataview
+                if (sourceType === 'dataview') {
+                  return (
+                    <Box sx={{ mt: 0.5 }}>
+                      <AutoBrowse
+                        value={
+                          typeof optionsSource === 'string' && optionsSource !== '' && optionsSource !== '__DATAVIEW_PENDING__'
+                            ? dataviewsList.filter(
+                                (dv: any) => (dv.id || dv.dataview_id) === optionsSource
+                              )
+                            : []
+                        }
+                        valueField="dataview_id"
+                        labelField="description"
+                        dataProvider={dataviewsList}
+                        loading={dataviewsLoading}
+                        disabled={dataviewsLoading}
+                        onChange={async (selected) => {
+                          if (selected && selected.length > 0) {
+                            const dataview = selected[0];
+                            const dataviewId = dataview.id || dataview.dataview_id;
+                            const dataviewUrl = dataview.url || dataview.openapi_url;
+                            handlePropertyChange('optionsSource', dataviewId);
+                            
+                            try {
+                              // Use the selected dataview's specific API URL
+                              let data: any[] = [];
+                              let fields: string[] = [];
+                              
+                              if (dataviewUrl) {
+                                // Call the specific dataview's API endpoint
+                                console.log('Calling dataview API:', dataviewUrl);
+                                data = await openAPIUtils.generateAndLoadDataView(dataviewUrl);
+                                
+                                // Extract fields from the response
+                                if (Array.isArray(data) && data.length > 0) {
+                                  fields = Object.keys(data[0]);
+                                } else if (dataview.fields && Array.isArray(dataview.fields)) {
+                                  fields = dataview.fields;
+                                }
+                              } else {
+                                // Fallback to generic endpoint if no URL
+                                console.log('No dataview URL, using fallback');
+                                fields = await dataviewManager.loadDataviewFields(dataviewId);
+                                data = await dataviewManager.loadDataview(dataviewId);
+                                
+                                // If fields are empty but we have data, extract fields from first record
+                                if ((!fields || fields.length === 0) && Array.isArray(data) && data.length > 0) {
+                                  fields = Object.keys(data[0]);
+                                }
+                              }
+                              
+                              setDataviewFields(fields);
+                              setDataviewData(dataviewId, data);
+                              setSelectedDataviewResponse(data);
+                              
+                              // Auto-populate valueField and labelField if not already set
+                              if (fields.length > 0) {
+                                const currentValueField = componentWithProps.props?.valueField;
+                                const currentLabelField = componentWithProps.props?.labelField;
+                                
+                                if (!currentValueField) {
+                                  handlePropertyChange('valueField', fields[0]);
+                                }
+                                if (!currentLabelField) {
+                                  // Try to find a good label field (name, title, description, etc.)
+                                  const labelFieldCandidates = ['name', 'title', 'description', 'label', 'text'];
+                                  const foundLabelField = labelFieldCandidates.find(f => fields.includes(f));
+                                  handlePropertyChange('labelField', foundLabelField || (fields[1] || fields[0]));
+                                }
+                              }
+                            } catch (error) {
+                              console.error('Failed to load dataview:', error);
+                              setDataviewFields([]);
+                              setSelectedDataviewResponse(null);
+                            }
+                          } else {
+                            handlePropertyChange('optionsSource', undefined);
+                            setDataviewFields([]);
+                            setSelectedDataviewResponse(null);
+                          }
+                        }}
+                        onDataviewSelect={async (dataview) => {
+                          const dataviewId = dataview.id || dataview.dataview_id;
+                          const dataviewUrl = dataview.url || dataview.openapi_url;
+                          try {
+                            // Use the selected dataview's specific API URL
+                            let data: any[] = [];
+                            let fields: string[] = [];
+                            
+                            if (dataviewUrl) {
+                              // Call the specific dataview's API endpoint
+                              console.log('Calling dataview API:', dataviewUrl);
+                              data = await openAPIUtils.generateAndLoadDataView(dataviewUrl);
+                              
+                              // Extract fields from the response
+                              if (Array.isArray(data) && data.length > 0) {
+                                fields = Object.keys(data[0]);
+                              } else if (dataview.fields && Array.isArray(dataview.fields)) {
+                                fields = dataview.fields;
+                              }
+                            } else {
+                              // Fallback to generic endpoint if no URL
+                              console.log('No dataview URL, using fallback');
+                              fields = await dataviewManager.loadDataviewFields(dataviewId);
+                              data = await dataviewManager.loadDataview(dataviewId);
+                              
+                              // If fields are empty but we have data, extract fields from first record
+                              if ((!fields || fields.length === 0) && Array.isArray(data) && data.length > 0) {
+                                fields = Object.keys(data[0]);
+                              }
+                            }
+                            
+                            setDataviewFields(fields);
+                            setDataviewData(dataviewId, data);
+                            setSelectedDataviewResponse(data);
+                            
+                            // Auto-populate valueField and labelField if not already set
+                            if (fields.length > 0) {
+                              const currentValueField = componentWithProps.props?.valueField;
+                              const currentLabelField = componentWithProps.props?.labelField;
+                              
+                              if (!currentValueField) {
+                                handlePropertyChange('valueField', fields[0]);
+                              }
+                              if (!currentLabelField) {
+                                // Try to find a good label field (name, title, description, etc.)
+                                const labelFieldCandidates = ['name', 'title', 'description', 'label', 'text'];
+                                const foundLabelField = labelFieldCandidates.find(f => fields.includes(f));
+                                handlePropertyChange('labelField', foundLabelField || (fields[1] || fields[0]));
+                              }
+                            }
+                          } catch (error) {
+                            console.error('Failed to load dataview:', error);
+                            setDataviewFields([]);
+                            setSelectedDataviewResponse(null);
+                          }
+                        }}
+                      />
+                      {/* Field Selection UI after dataview is selected */}
+                      {dataviewFields.length > 0 && selectedDataviewResponse !== null && (
+                        <Box sx={{ mt: 2, p: 1.5, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+                          <Typography variant="subtitle2" sx={{ mb: 1.5, fontWeight: 600 }}>
+                            Configure Dropdown Fields
+                          </Typography>
+                          
+                          {/* Field Selection Dropdowns */}
+                          <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+                            <FormControl fullWidth size="small">
+                              <InputLabel>Value Field</InputLabel>
+                              <Select
+                                value={componentWithProps.props?.valueField || dataviewFields[0] || ''}
+                                label="Value Field"
+                                onChange={(e) => handlePropertyChange('valueField', e.target.value)}
+                              >
+                                {dataviewFields.map((field) => (
+                                  <MenuItem key={field} value={field}>
+                                    {field}
+                                  </MenuItem>
+                                ))}
+                              </Select>
+                            </FormControl>
+                            
+                            <FormControl fullWidth size="small">
+                              <InputLabel>Label Field</InputLabel>
+                              <Select
+                                value={componentWithProps.props?.labelField || (dataviewFields[1] || dataviewFields[0] || '')}
+                                label="Label Field"
+                                onChange={(e) => handlePropertyChange('labelField', e.target.value)}
+                              >
+                                {dataviewFields.map((field) => (
+                                  <MenuItem key={field} value={field}>
+                                    {field}
+                                  </MenuItem>
+                                ))}
+                              </Select>
+                            </FormControl>
+                          </Box>
+
+                          {/* Parsed Fields Display */}
+                          <Box sx={{ mb: 2 }}>
+                            <Typography variant="caption" sx={{ fontWeight: 600, display: 'block', mb: 1 }}>
+                              Available Fields ({dataviewFields.length}):
+                            </Typography>
+                            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                              {dataviewFields.map((field) => {
+                                const isValueField = field === (componentWithProps.props?.valueField || dataviewFields[0]);
+                                const isLabelField = field === (componentWithProps.props?.labelField || (dataviewFields[1] || dataviewFields[0]));
+                                return (
+                                  <Chip
+                                    key={field}
+                                    label={field}
+                                    size="small"
+                                    color={isValueField ? 'primary' : isLabelField ? 'secondary' : 'default'}
+                                    variant={isValueField || isLabelField ? 'filled' : 'outlined'}
+                                  />
+                                );
+                              })}
+                            </Box>
+                          </Box>
+
+                          {/* Preview of Dropdown Options */}
+                          {Array.isArray(selectedDataviewResponse) && selectedDataviewResponse.length > 0 && (
+                            <Box sx={{ mb: 2 }}>
+                              <Typography variant="caption" sx={{ fontWeight: 600, display: 'block', mb: 1 }}>
+                                Preview (first 5 records):
+                              </Typography>
+                              <Box
+                                sx={{
+                                  p: 1,
+                                  bgcolor: 'grey.50',
+                                  borderRadius: 1,
+                                  maxHeight: 200,
+                                  overflow: 'auto',
+                                }}
+                              >
+                                {selectedDataviewResponse.slice(0, 5).map((item: any, index: number) => {
+                                  const valueField = componentWithProps.props?.valueField || dataviewFields[0] || 'id';
+                                  const labelField = componentWithProps.props?.labelField || (dataviewFields[1] || dataviewFields[0] || 'name');
+                                  const value = item[valueField] !== undefined ? item[valueField] : item.id;
+                                  const label = item[labelField] !== undefined ? item[labelField] : item.name || value || String(item);
+                                  return (
+                                    <Box key={index} sx={{ py: 0.5, borderBottom: index < 4 ? '1px solid' : 'none', borderColor: 'divider' }}>
+                                      <Typography variant="caption" sx={{ fontFamily: 'monospace' }}>
+                                        {label} <span style={{ color: '#666' }}>(value: {String(value)})</span>
+                                      </Typography>
+                                    </Box>
+                                  );
+                                })}
+                              </Box>
+                              {selectedDataviewResponse.length > 5 && (
+                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                                  ... and {selectedDataviewResponse.length - 5} more records
+                                </Typography>
+                              )}
+                            </Box>
+                          )}
+
+                          {/* Raw API Response (Collapsible) */}
+                          <Accordion>
+                            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                <CodeIcon />
+                                <Typography variant="caption" sx={{ fontWeight: 600 }}>
+                                  View Raw API Response
+                                </Typography>
+                              </Box>
+                            </AccordionSummary>
+                            <AccordionDetails>
+                              <Box
+                                sx={{
+                                  p: 1,
+                                  bgcolor: 'grey.100',
+                                  borderRadius: 1,
+                                  maxHeight: 300,
+                                  overflow: 'auto',
+                                  fontFamily: 'monospace',
+                                  fontSize: '0.75rem',
+                                }}
+                              >
+                                <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                                  {JSON.stringify(selectedDataviewResponse, null, 2)}
+                                </pre>
+                              </Box>
+                              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                                Total Records: {Array.isArray(selectedDataviewResponse) ? selectedDataviewResponse.length : 'N/A'}
+                              </Typography>
+                            </AccordionDetails>
+                          </Accordion>
+                        </Box>
+                      )}
+                    </Box>
+                  );
                 }
                 
                 if (sourceType === 'static') {
@@ -1353,36 +1706,84 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
               helperText="Maximum number of items allowed (leave empty for unlimited)"
             />
             <Box sx={{ mt: 1 }}>
-              <Typography variant="caption" sx={{ display: 'block', mb: 0.5, fontWeight: 600 }}>
-                Data Provider (Dataview or Static Data)
-              </Typography>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
+                <Typography variant="caption" sx={{ fontWeight: 600 }}>
+                  Data Provider (Dataview or Static Data)
+                </Typography>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  onClick={async () => {
+                    try {
+                      setDataviewsLoading(true);
+                      await dataviewManager.list.init();
+                      const loadedData = dataviewManager.list.getAllLoadedData();
+                      setDataviewsList(loadedData);
+                      console.log('Refreshed dataviews:', loadedData.length, loadedData);
+                    } catch (error) {
+                      console.error('Failed to refresh dataviews:', error);
+                    } finally {
+                      setDataviewsLoading(false);
+                    }
+                  }}
+                  disabled={dataviewsLoading}
+                  sx={{ minWidth: 'auto', px: 1, py: 0.5, fontSize: '0.75rem' }}
+                >
+                  {dataviewsLoading ? 'Loading...' : 'Refresh'}
+                </Button>
+              </Box>
+              {dataviewsList.length === 0 && !dataviewsLoading && (
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                  No dataviews loaded. Click Refresh to load from API.
+                </Typography>
+              )}
               <AutoBrowse
                 value={
                   componentWithProps.props?.dataProvider && 
-                  typeof componentWithProps.props.dataProvider === 'object' &&
-                  'dataview_id' in componentWithProps.props.dataProvider
+                  typeof componentWithProps.props.dataProvider === 'string'
+                    ? dataviewsList.filter(
+                        (dv: any) => (dv.id || dv.dataview_id) === componentWithProps.props.dataProvider
+                      )
+                    : componentWithProps.props?.dataProvider && 
+                      typeof componentWithProps.props.dataProvider === 'object' &&
+                      'dataview_id' in componentWithProps.props.dataProvider
                     ? [componentWithProps.props.dataProvider]
                     : []
                 }
                 valueField="dataview_id"
                 labelField="description"
-                dataProvider={dataviewManager.list.getAllLoadedData() || []}
+                dataProvider={dataviewsList}
                 loading={dataviewsLoading}
                 disabled={dataviewsLoading}
                 onChange={async (selected) => {
                   if (selected && selected.length > 0) {
                     const dataview = selected[0];
-                    handlePropertyChange('dataProvider', {
-                      dataview_id: dataview.id || dataview.dataview_id,
-                      type: 'dataview',
-                    });
+                    const dataviewId = dataview.id || dataview.dataview_id;
                     
-                    // Auto-load fields
+                    // Ruaj vetëm string reference në JSON (si projekti i vjetër)
+                    handlePropertyChange('dataProvider', dataviewId);
+                    
                     try {
-                      const fields = await dataviewManager.loadDataviewFields(dataview.id || dataview.dataview_id);
+                      // Ngarko fields
+                      const fields = await dataviewManager.loadDataviewFields(dataviewId);
                       setDataviewFields(fields);
+                      
+                      // Ngarko dhe cache-o të dhënat për builder preview
+                      const data = await dataviewManager.loadDataview(dataviewId);
+                      setDataviewData(dataviewId, data);
+                      
+                      // Auto-populate valueField/labelField nëse nuk janë set
+                      if (fields.length > 0 && !componentWithProps.props?.valueField) {
+                        handlePropertyChange('valueField', fields[0]);
+                      }
+                      if (fields.length > 1 && !componentWithProps.props?.labelField) {
+                        handlePropertyChange('labelField', fields[1]);
+                      } else if (fields.length > 0 && !componentWithProps.props?.labelField) {
+                        // Nëse ka vetëm një field, përdor të njëjtin si label
+                        handlePropertyChange('labelField', fields[0]);
+                      }
                     } catch (error) {
-                      console.error('Failed to load dataview fields:', error);
+                      console.error('Failed to load dataview:', error);
                       setDataviewFields([]);
                     }
                   } else {
@@ -1391,12 +1792,16 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
                   }
                 }}
                 onDataviewSelect={async (dataview) => {
-                  // Load fields when dataview is selected
+                  const dataviewId = dataview.id || dataview.dataview_id;
                   try {
-                    const fields = await dataviewManager.loadDataviewFields(dataview.id || dataview.dataview_id);
+                    const fields = await dataviewManager.loadDataviewFields(dataviewId);
                     setDataviewFields(fields);
+                    
+                    // Ngarko dhe cache-o të dhënat për builder preview
+                    const data = await dataviewManager.loadDataview(dataviewId);
+                    setDataviewData(dataviewId, data);
                   } catch (error) {
-                    console.error('Failed to load dataview fields:', error);
+                    console.error('Failed to load dataview:', error);
                     setDataviewFields([]);
                   }
                 }}
@@ -1406,8 +1811,13 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
                 label="Or enter static data/function (JSON array or function)"
                 value={
                   componentWithProps.props?.dataProvider &&
-                  typeof componentWithProps.props.dataProvider === 'object' &&
-                  'dataview_id' in componentWithProps.props.dataProvider
+                  typeof componentWithProps.props.dataProvider === 'string' &&
+                  (getDataviewData(componentWithProps.props.dataProvider) || 
+                   dataviewsList.some((dv: any) => (dv.id || dv.dataview_id) === componentWithProps.props.dataProvider))
+                    ? '' // Hide text input nëse është dataview reference
+                    : componentWithProps.props?.dataProvider &&
+                      typeof componentWithProps.props.dataProvider === 'object' &&
+                      'dataview_id' in componentWithProps.props.dataProvider
                     ? ''
                     : typeof componentWithProps.props?.dataProvider === 'string'
                     ? componentWithProps.props.dataProvider
@@ -1433,9 +1843,13 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
                 sx={{ mt: 1 }}
                 helperText="Array of data objects or JavaScript function: (data, component) => []"
                 disabled={
-                  componentWithProps.props?.dataProvider &&
+                  (componentWithProps.props?.dataProvider &&
                   typeof componentWithProps.props.dataProvider === 'object' &&
-                  'dataview_id' in componentWithProps.props.dataProvider
+                  'dataview_id' in componentWithProps.props.dataProvider) ||
+                  (componentWithProps.props?.dataProvider &&
+                  typeof componentWithProps.props.dataProvider === 'string' &&
+                  (getDataviewData(componentWithProps.props.dataProvider) || 
+                   dataviewsList.some((dv: any) => (dv.id || dv.dataview_id) === componentWithProps.props.dataProvider)))
                 }
               />
             </Box>
@@ -1468,57 +1882,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
                 Data Source
               </Typography>
               {(() => {
-                // Helper function to detect source type
-                const detectSourceType = (): 'static' | 'function' | 'computed' | 'dataKey' | 'dataview' => {
-                  const dataSource = componentWithProps.props?.dataSource;
-                  
-                  // Check if it's a dataview object
-                  if (dataSource && typeof dataSource === 'object' && !Array.isArray(dataSource) && 'dataview_id' in dataSource) {
-                    return 'dataview';
-                  }
-                  
-                  // Check if it's a function
-                  if (typeof dataSource === 'function') {
-                    return 'function';
-                  }
-                  
-                  // Check if it's a computed property object
-                  if (dataSource && typeof dataSource === 'object' && !Array.isArray(dataSource) && 'computeType' in dataSource) {
-                    return 'computed';
-                  }
-                  
-                  // Check if it's an array (static)
-                  if (Array.isArray(dataSource)) {
-                    return 'static';
-                  }
-                  
-                  // Check if it's a string (could be dataKey or function name)
-                  if (typeof dataSource === 'string') {
-                    // If it's a non-empty string and not a JSON array, it's likely a dataKey or function name
-                    if (dataSource.trim() !== '') {
-                      // Try to parse as JSON to see if it's an array
-                      try {
-                        const parsed = JSON.parse(dataSource);
-                        if (Array.isArray(parsed)) {
-                          return 'static';
-                        }
-                      } catch {
-                        // Not valid JSON, could be dataKey or function name
-                        // Check if it looks like a function name (simple identifier)
-                        if (dataSource.match(/^[a-zA-Z_$][a-zA-Z0-9_$]*$/)) {
-                          return 'function';
-                        }
-                        return 'dataKey';
-                      }
-                    }
-                    return 'dataKey';
-                  }
-                  
-                  // Default to static
-                  return 'static';
-                };
-                
-                const currentSourceType = detectSourceType();
+                const currentSourceType = detectSourceType(componentWithProps.props?.dataSource, 'dataSource');
                 
                 return (
                   <>
@@ -1530,6 +1894,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
                         onChange={(e) => {
                           const newType = e.target.value as 'static' | 'function' | 'computed' | 'dataKey' | 'dataview';
                           const currentDataSource = componentWithProps.props?.dataSource;
+                          const currentType = detectSourceType(currentDataSource, 'dataSource');
                           
                           // If switching to advanced type but advanced mode is off, reset to static
                           if ((newType === 'function' || newType === 'computed') && !advancedMode) {
@@ -1554,35 +1919,35 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
                               }
                             }
                           } else if (newType === 'dataview') {
-                            // Don't set anything, let AutoBrowse handle it
-                            if (!(currentDataSource && typeof currentDataSource === 'object' && 'dataview_id' in currentDataSource)) {
-                              // Clear if not already a dataview
-                              handlePropertyChange('dataSource', { dataview_id: '', type: 'dataview' });
+                            // Only set if not already a dataview
+                            if (currentType !== 'dataview') {
+                              // Check if it's a string dataview reference
+                              if (typeof currentDataSource === 'string' && currentDataSource && 
+                                  (getDataviewData(currentDataSource) || dataviewsList.some((dv: any) => (dv.id || dv.dataview_id) === currentDataSource))) {
+                                // Already a dataview string reference, keep it
+                                return;
+                              }
+                              // Otherwise set marker to let AutoBrowse handle it
+                              handlePropertyChange('dataSource', '__DATAVIEW_PENDING__');
                             }
                           } else if (newType === 'function') {
                             // If current value is already a function, keep it
-                            if (typeof currentDataSource === 'function') {
-                              // Keep the function
+                            if (currentType === 'function') {
                               return;
                             }
                             // Otherwise set default function string
                             handlePropertyChange('dataSource', '(data, component) => { return []; }');
                           } else if (newType === 'computed') {
                             // If current value is already a computed property, keep it
-                            if (currentDataSource && typeof currentDataSource === 'object' && 'computeType' in currentDataSource) {
-                              // Keep the computed property
+                            if (currentType === 'computed') {
                               return;
                             }
                             // Otherwise set default computed property
                             handlePropertyChange('dataSource', { computeType: 'function', fnSource: 'return [];' });
                           } else if (newType === 'dataKey') {
-                            // If current value is already a string (and not a function name), keep it
-                            if (typeof currentDataSource === 'string' && currentDataSource.trim() !== '') {
-                              // Check if it's a function name
-                              if (!currentDataSource.match(/^[a-zA-Z_$][a-zA-Z0-9_$]*$/)) {
-                                // Not a function name, keep as dataKey
-                                return;
-                              }
+                            // If current value is already a dataKey, keep it
+                            if (currentType === 'dataKey' && typeof currentDataSource === 'string' && currentDataSource.trim() !== '') {
+                              return;
                             }
                             // Otherwise set empty string
                             handlePropertyChange('dataSource', '');
@@ -1736,40 +2101,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
                 Items Data Source
               </Typography>
               {(() => {
-                // Helper function to detect source type
-                const detectSourceType = (): 'static' | 'function' | 'computed' | 'dataKey' | 'dataview' => {
-                  const dataSource = componentWithProps.props?.dataSource;
-                  
-                  // Check if it's a dataview object
-                  if (dataSource && typeof dataSource === 'object' && !Array.isArray(dataSource) && 'dataview_id' in dataSource) {
-                    return 'dataview';
-                  }
-                  
-                  if (typeof dataSource === 'function') return 'function';
-                  if (dataSource && typeof dataSource === 'object' && !Array.isArray(dataSource) && 'computeType' in dataSource) return 'computed';
-                  if (Array.isArray(dataSource)) return 'static';
-                  
-                  if (typeof dataSource === 'string') {
-                    if (dataSource.trim() !== '') {
-                      try {
-                        const parsed = JSON.parse(dataSource);
-                        if (Array.isArray(parsed)) return 'static';
-                      } catch {
-                        if (dataSource.match(/^[a-zA-Z_$][a-zA-Z0-9_$]*$/)) return 'function';
-                        return 'dataKey';
-                      }
-                    }
-                    return 'dataKey';
-                  }
-                  
-                  if (Array.isArray(componentWithProps.props?.items) || Array.isArray(componentWithProps.props?.data)) {
-                    return 'static';
-                  }
-                  
-                  return 'static';
-                };
-                
-                const currentSourceType = detectSourceType();
+                const currentSourceType = detectSourceType(componentWithProps.props?.dataSource, 'dataSource');
                 
                 return (
                   <>
@@ -1779,8 +2111,9 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
                         value={currentSourceType}
                         label="Source Type"
                         onChange={(e) => {
-                          const newType = e.target.value as 'static' | 'function' | 'computed' | 'dataKey';
+                          const newType = e.target.value as 'static' | 'function' | 'computed' | 'dataKey' | 'dataview';
                           const currentDataSource = componentWithProps.props?.dataSource;
+                          const currentType = detectSourceType(currentDataSource, 'dataSource');
                           
                           if (newType === 'static') {
                             if (Array.isArray(currentDataSource)) {
@@ -1793,6 +2126,18 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
                                 handlePropertyChange('dataSource', []);
                               }
                             }
+                          } else if (newType === 'dataview') {
+                            // Only set if not already a dataview
+                            if (currentType !== 'dataview') {
+                              // Check if it's a string dataview reference
+                              if (typeof currentDataSource === 'string' && currentDataSource && 
+                                  (getDataviewData(currentDataSource) || dataviewsList.some((dv: any) => (dv.id || dv.dataview_id) === currentDataSource))) {
+                                // Already a dataview string reference, keep it
+                                return;
+                              }
+                              // Otherwise set marker to let AutoBrowse handle it
+                              handlePropertyChange('dataSource', '__DATAVIEW_PENDING__');
+                            }
                           } else if (newType === 'function') {
                             // If advanced mode is off, reset to static
                             if (!advancedMode) {
@@ -1800,7 +2145,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
                               handlePropertyChange('dataSource', Array.isArray(existingData) ? existingData : []);
                               return;
                             }
-                            if (typeof currentDataSource === 'function') return;
+                            if (currentType === 'function') return;
                             handlePropertyChange('dataSource', '(data, component) => { return []; }');
                           } else if (newType === 'computed') {
                             // If advanced mode is off, reset to static
@@ -1809,15 +2154,16 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
                               handlePropertyChange('dataSource', Array.isArray(existingData) ? existingData : []);
                               return;
                             }
-                            if (currentDataSource && typeof currentDataSource === 'object' && 'computeType' in currentDataSource) return;
+                            if (currentType === 'computed') return;
                             handlePropertyChange('dataSource', { computeType: 'function', fnSource: 'return [];' });
                           } else if (newType === 'dataKey') {
-                            if (typeof currentDataSource === 'string' && currentDataSource.trim() !== '' && !currentDataSource.match(/^[a-zA-Z_$][a-zA-Z0-9_$]*$/)) return;
+                            if (currentType === 'dataKey' && typeof currentDataSource === 'string' && currentDataSource.trim() !== '') return;
                             handlePropertyChange('dataSource', '');
                           }
                         }}
                       >
                         <MenuItem value="static">Static Array</MenuItem>
+                        <MenuItem value="dataview">Dataview</MenuItem>
                         <MenuItem value="function">Function (Data Provider)</MenuItem>
                         <MenuItem value="computed">Computed Property</MenuItem>
                         <MenuItem value="dataKey">Data Key (from Form Data)</MenuItem>
@@ -1833,28 +2179,40 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
                       <AutoBrowse
                         value={
                           componentWithProps.props?.dataSource && 
-                          typeof componentWithProps.props.dataSource === 'object' &&
-                          'dataview_id' in componentWithProps.props.dataSource
+                          typeof componentWithProps.props.dataSource === 'string' &&
+                          componentWithProps.props.dataSource !== '__DATAVIEW_PENDING__'
+                            ? dataviewsList.filter(
+                                (dv: any) => (dv.id || dv.dataview_id) === componentWithProps.props.dataSource
+                              )
+                            : componentWithProps.props?.dataSource && 
+                              typeof componentWithProps.props.dataSource === 'object' &&
+                              'dataview_id' in componentWithProps.props.dataSource
                             ? [componentWithProps.props.dataSource]
                             : []
                         }
                         valueField="dataview_id"
                         labelField="description"
-                        dataProvider={dataviewManager.list.getAllLoadedData() || []}
+                        dataProvider={dataviewsList}
                         loading={dataviewsLoading}
                         disabled={dataviewsLoading || !dataviewManager.list.totalRecords}
                         onChange={async (selected) => {
                           if (selected && selected.length > 0) {
                             const dataview = selected[0];
-                            handlePropertyChange('dataSource', {
-                              dataview_id: dataview.id || dataview.dataview_id,
-                              type: 'dataview',
-                            });
+                            const dataviewId = dataview.id || dataview.dataview_id;
+                            
+                            // Ruaj vetëm string reference në JSON (si projekti i vjetër)
+                            handlePropertyChange('dataSource', dataviewId);
+                            
                             try {
-                              const fields = await dataviewManager.loadDataviewFields(dataview.id || dataview.dataview_id);
+                              // Ngarko fields
+                              const fields = await dataviewManager.loadDataviewFields(dataviewId);
                               setDataviewFields(fields);
+                              
+                              // Ngarko dhe cache-o të dhënat për builder preview
+                              const data = await dataviewManager.loadDataview(dataviewId);
+                              setDataviewData(dataviewId, data);
                             } catch (error) {
-                              console.error('Failed to load dataview fields:', error);
+                              console.error('Failed to load dataview:', error);
                               setDataviewFields([]);
                             }
                           } else {
@@ -1863,11 +2221,16 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
                           }
                         }}
                         onDataviewSelect={async (dataview) => {
+                          const dataviewId = dataview.id || dataview.dataview_id;
                           try {
-                            const fields = await dataviewManager.loadDataviewFields(dataview.id || dataview.dataview_id);
+                            const fields = await dataviewManager.loadDataviewFields(dataviewId);
                             setDataviewFields(fields);
+                            
+                            // Ngarko dhe cache-o të dhënat për builder preview
+                            const data = await dataviewManager.loadDataview(dataviewId);
+                            setDataviewData(dataviewId, data);
                           } catch (error) {
-                            console.error('Failed to load dataview fields:', error);
+                            console.error('Failed to load dataview:', error);
                             setDataviewFields([]);
                           }
                         }}
@@ -1993,28 +2356,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
                 Tree Data Source
               </Typography>
               {(() => {
-                const detectSourceType = (): 'static' | 'function' | 'computed' | 'dataKey' => {
-                  const dataSource = componentWithProps.props?.dataSource;
-                  if (typeof dataSource === 'function') return 'function';
-                  if (dataSource && typeof dataSource === 'object' && !Array.isArray(dataSource) && 'computeType' in dataSource) return 'computed';
-                  if (Array.isArray(dataSource)) return 'static';
-                  if (typeof dataSource === 'string') {
-                    if (dataSource.trim() !== '') {
-                      try {
-                        const parsed = JSON.parse(dataSource);
-                        if (Array.isArray(parsed)) return 'static';
-                      } catch {
-                        if (dataSource.match(/^[a-zA-Z_$][a-zA-Z0-9_$]*$/)) return 'function';
-                        return 'dataKey';
-                      }
-                    }
-                    return 'dataKey';
-                  }
-                  if (Array.isArray(componentWithProps.props?.data) || Array.isArray(componentWithProps.props?.treeData)) return 'static';
-                  return 'static';
-                };
-                
-                const currentSourceType = detectSourceType();
+                const currentSourceType = detectSourceType(componentWithProps.props?.dataSource, 'dataSource');
                 
                 return (
                   <>
@@ -2026,6 +2368,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
                         onChange={(e) => {
                           const newType = e.target.value as 'static' | 'function' | 'computed' | 'dataKey' | 'dataview';
                           const currentDataSource = componentWithProps.props?.dataSource;
+                          const currentType = detectSourceType(currentDataSource, 'dataSource');
                           
                           // If switching to advanced type but advanced mode is off, reset to static
                           if ((newType === 'function' || newType === 'computed') && !advancedMode) {
@@ -2046,19 +2389,25 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
                               }
                             }
                           } else if (newType === 'dataview') {
-                            // Don't set anything, let AutoBrowse handle it
-                            if (!(currentDataSource && typeof currentDataSource === 'object' && 'dataview_id' in currentDataSource)) {
-                              // Clear if not already a dataview
-                              handlePropertyChange('dataSource', { dataview_id: '', type: 'dataview' });
+                            // Only set if not already a dataview
+                            if (currentType !== 'dataview') {
+                              // Check if it's a string dataview reference
+                              if (typeof currentDataSource === 'string' && currentDataSource && 
+                                  (getDataviewData(currentDataSource) || dataviewsList.some((dv: any) => (dv.id || dv.dataview_id) === currentDataSource))) {
+                                // Already a dataview string reference, keep it
+                                return;
+                              }
+                              // Otherwise set marker to let AutoBrowse handle it
+                              handlePropertyChange('dataSource', '__DATAVIEW_PENDING__');
                             }
                           } else if (newType === 'function') {
-                            if (typeof currentDataSource === 'function') return;
+                            if (currentType === 'function') return;
                             handlePropertyChange('dataSource', '(data, component) => { return []; }');
                           } else if (newType === 'computed') {
-                            if (currentDataSource && typeof currentDataSource === 'object' && 'computeType' in currentDataSource) return;
+                            if (currentType === 'computed') return;
                             handlePropertyChange('dataSource', { computeType: 'function', fnSource: 'return [];' });
                           } else if (newType === 'dataKey') {
-                            if (typeof currentDataSource === 'string' && currentDataSource.trim() !== '' && !currentDataSource.match(/^[a-zA-Z_$][a-zA-Z0-9_$]*$/)) return;
+                            if (currentType === 'dataKey' && typeof currentDataSource === 'string' && currentDataSource.trim() !== '') return;
                             handlePropertyChange('dataSource', '');
                           }
                         }}
@@ -2084,28 +2433,40 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
                       <AutoBrowse
                         value={
                           componentWithProps.props?.dataSource && 
-                          typeof componentWithProps.props.dataSource === 'object' &&
-                          'dataview_id' in componentWithProps.props.dataSource
+                          typeof componentWithProps.props.dataSource === 'string' &&
+                          componentWithProps.props.dataSource !== '__DATAVIEW_PENDING__'
+                            ? dataviewsList.filter(
+                                (dv: any) => (dv.id || dv.dataview_id) === componentWithProps.props.dataSource
+                              )
+                            : componentWithProps.props?.dataSource && 
+                              typeof componentWithProps.props.dataSource === 'object' &&
+                              'dataview_id' in componentWithProps.props.dataSource
                             ? [componentWithProps.props.dataSource]
                             : []
                         }
                         valueField="dataview_id"
                         labelField="description"
-                        dataProvider={dataviewManager.list.getAllLoadedData() || []}
+                        dataProvider={dataviewsList}
                         loading={dataviewsLoading}
                         disabled={dataviewsLoading || !dataviewManager.list.totalRecords}
                         onChange={async (selected) => {
                           if (selected && selected.length > 0) {
                             const dataview = selected[0];
-                            handlePropertyChange('dataSource', {
-                              dataview_id: dataview.id || dataview.dataview_id,
-                              type: 'dataview',
-                            });
+                            const dataviewId = dataview.id || dataview.dataview_id;
+                            
+                            // Ruaj vetëm string reference në JSON (si projekti i vjetër)
+                            handlePropertyChange('dataSource', dataviewId);
+                            
                             try {
-                              const fields = await dataviewManager.loadDataviewFields(dataview.id || dataview.dataview_id);
+                              // Ngarko fields
+                              const fields = await dataviewManager.loadDataviewFields(dataviewId);
                               setDataviewFields(fields);
+                              
+                              // Ngarko dhe cache-o të dhënat për builder preview
+                              const data = await dataviewManager.loadDataview(dataviewId);
+                              setDataviewData(dataviewId, data);
                             } catch (error) {
-                              console.error('Failed to load dataview fields:', error);
+                              console.error('Failed to load dataview:', error);
                               setDataviewFields([]);
                             }
                           } else {
@@ -2114,11 +2475,16 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
                           }
                         }}
                         onDataviewSelect={async (dataview) => {
+                          const dataviewId = dataview.id || dataview.dataview_id;
                           try {
-                            const fields = await dataviewManager.loadDataviewFields(dataview.id || dataview.dataview_id);
+                            const fields = await dataviewManager.loadDataviewFields(dataviewId);
                             setDataviewFields(fields);
+                            
+                            // Ngarko dhe cache-o të dhënat për builder preview
+                            const data = await dataviewManager.loadDataview(dataviewId);
+                            setDataviewData(dataviewId, data);
                           } catch (error) {
-                            console.error('Failed to load dataview fields:', error);
+                            console.error('Failed to load dataview:', error);
                             setDataviewFields([]);
                           }
                         }}
@@ -2222,28 +2588,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
                 Data Source
               </Typography>
               {(() => {
-                const detectSourceType = (): 'static' | 'function' | 'computed' | 'dataKey' => {
-                  const dataSource = componentWithProps.props?.dataSource;
-                  if (typeof dataSource === 'function') return 'function';
-                  if (dataSource && typeof dataSource === 'object' && !Array.isArray(dataSource) && 'computeType' in dataSource) return 'computed';
-                  if (Array.isArray(dataSource)) return 'static';
-                  if (typeof dataSource === 'string') {
-                    if (dataSource.trim() !== '') {
-                      try {
-                        const parsed = JSON.parse(dataSource);
-                        if (Array.isArray(parsed)) return 'static';
-                      } catch {
-                        if (dataSource.match(/^[a-zA-Z_$][a-zA-Z0-9_$]*$/)) return 'function';
-                        return 'dataKey';
-                      }
-                    }
-                    return 'dataKey';
-                  }
-                  if (Array.isArray(componentWithProps.props?.rows) || Array.isArray(componentWithProps.props?.data)) return 'static';
-                  return 'static';
-                };
-                
-                const currentSourceType = detectSourceType();
+                const currentSourceType = detectSourceType(componentWithProps.props?.dataSource, 'dataSource');
                 
                 return (
                   <>
@@ -2255,6 +2600,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
                         onChange={(e) => {
                           const newType = e.target.value as 'static' | 'function' | 'computed' | 'dataKey' | 'dataview';
                           const currentDataSource = componentWithProps.props?.dataSource;
+                          const currentType = detectSourceType(currentDataSource, 'dataSource');
                           
                           // If switching to advanced type but advanced mode is off, reset to static
                           if ((newType === 'function' || newType === 'computed') && !advancedMode) {
@@ -2275,19 +2621,25 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
                               }
                             }
                           } else if (newType === 'dataview') {
-                            // Don't set anything, let AutoBrowse handle it
-                            if (!(currentDataSource && typeof currentDataSource === 'object' && 'dataview_id' in currentDataSource)) {
-                              // Clear if not already a dataview
-                              handlePropertyChange('dataSource', { dataview_id: '', type: 'dataview' });
+                            // Only set if not already a dataview
+                            if (currentType !== 'dataview') {
+                              // Check if it's a string dataview reference
+                              if (typeof currentDataSource === 'string' && currentDataSource && 
+                                  (getDataviewData(currentDataSource) || dataviewsList.some((dv: any) => (dv.id || dv.dataview_id) === currentDataSource))) {
+                                // Already a dataview string reference, keep it
+                                return;
+                              }
+                              // Otherwise set marker to let AutoBrowse handle it
+                              handlePropertyChange('dataSource', '__DATAVIEW_PENDING__');
                             }
                           } else if (newType === 'function') {
-                            if (typeof currentDataSource === 'function') return;
+                            if (currentType === 'function') return;
                             handlePropertyChange('dataSource', '(data, component) => { return []; }');
                           } else if (newType === 'computed') {
-                            if (currentDataSource && typeof currentDataSource === 'object' && 'computeType' in currentDataSource) return;
+                            if (currentType === 'computed') return;
                             handlePropertyChange('dataSource', { computeType: 'function', fnSource: 'return [];' });
                           } else if (newType === 'dataKey') {
-                            if (typeof currentDataSource === 'string' && currentDataSource.trim() !== '' && !currentDataSource.match(/^[a-zA-Z_$][a-zA-Z0-9_$]*$/)) return;
+                            if (currentType === 'dataKey' && typeof currentDataSource === 'string' && currentDataSource.trim() !== '') return;
                             handlePropertyChange('dataSource', '');
                           }
                         }}
@@ -2313,28 +2665,40 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
                       <AutoBrowse
                         value={
                           componentWithProps.props?.dataSource && 
-                          typeof componentWithProps.props.dataSource === 'object' &&
-                          'dataview_id' in componentWithProps.props.dataSource
+                          typeof componentWithProps.props.dataSource === 'string' &&
+                          componentWithProps.props.dataSource !== '__DATAVIEW_PENDING__'
+                            ? dataviewsList.filter(
+                                (dv: any) => (dv.id || dv.dataview_id) === componentWithProps.props.dataSource
+                              )
+                            : componentWithProps.props?.dataSource && 
+                              typeof componentWithProps.props.dataSource === 'object' &&
+                              'dataview_id' in componentWithProps.props.dataSource
                             ? [componentWithProps.props.dataSource]
                             : []
                         }
                         valueField="dataview_id"
                         labelField="description"
-                        dataProvider={dataviewManager.list.getAllLoadedData() || []}
+                        dataProvider={dataviewsList}
                         loading={dataviewsLoading}
                         disabled={dataviewsLoading || !dataviewManager.list.totalRecords}
                         onChange={async (selected) => {
                           if (selected && selected.length > 0) {
                             const dataview = selected[0];
-                            handlePropertyChange('dataSource', {
-                              dataview_id: dataview.id || dataview.dataview_id,
-                              type: 'dataview',
-                            });
+                            const dataviewId = dataview.id || dataview.dataview_id;
+                            
+                            // Ruaj vetëm string reference në JSON (si projekti i vjetër)
+                            handlePropertyChange('dataSource', dataviewId);
+                            
                             try {
-                              const fields = await dataviewManager.loadDataviewFields(dataview.id || dataview.dataview_id);
+                              // Ngarko fields
+                              const fields = await dataviewManager.loadDataviewFields(dataviewId);
                               setDataviewFields(fields);
+                              
+                              // Ngarko dhe cache-o të dhënat për builder preview
+                              const data = await dataviewManager.loadDataview(dataviewId);
+                              setDataviewData(dataviewId, data);
                             } catch (error) {
-                              console.error('Failed to load dataview fields:', error);
+                              console.error('Failed to load dataview:', error);
                               setDataviewFields([]);
                             }
                           } else {
@@ -2343,11 +2707,16 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
                           }
                         }}
                         onDataviewSelect={async (dataview) => {
+                          const dataviewId = dataview.id || dataview.dataview_id;
                           try {
-                            const fields = await dataviewManager.loadDataviewFields(dataview.id || dataview.dataview_id);
+                            const fields = await dataviewManager.loadDataviewFields(dataviewId);
                             setDataviewFields(fields);
+                            
+                            // Ngarko dhe cache-o të dhënat për builder preview
+                            const data = await dataviewManager.loadDataview(dataviewId);
+                            setDataviewData(dataviewId, data);
                           } catch (error) {
-                            console.error('Failed to load dataview fields:', error);
+                            console.error('Failed to load dataview:', error);
                             setDataviewFields([]);
                           }
                         }}

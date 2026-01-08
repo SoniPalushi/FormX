@@ -27,7 +27,13 @@ export class DataviewManager {
       {
         recordsPerPage,
         fetchPromise: async (params) => {
-          const url = `${baseUrl}${apiConfig.getEndpoint('dataviews')}`;
+          // Përdor full URL nëse baseUrl tashmë përmban path, ose kombinim
+          const endpoint = apiConfig.getEndpoint('dataviews');
+          const url = endpoint.startsWith('http') 
+            ? endpoint 
+            : baseUrl.endsWith('/') 
+              ? `${baseUrl}${endpoint.startsWith('/') ? endpoint.slice(1) : endpoint}`
+              : `${baseUrl}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
           const response = await fetch(url, {
             method: 'POST',
             headers: apiConfig.getHeaders(),
@@ -79,16 +85,13 @@ export class DataviewManager {
   }
 
   /**
-   * Load dataview data from OpenAPI URL
+   * Load dataview data from API endpoint
+   * Përdor endpoint-in e implementuar: POST /api/dataviews/{id}/data
    */
   async loadDataview(dataviewId: string): Promise<any[]> {
     const dataview = this.getDataview(dataviewId);
     if (!dataview) {
       throw new Error(`Dataview not found: ${dataviewId}`);
-    }
-
-    if (!dataview.url) {
-      throw new Error(`Dataview URL not available: ${dataviewId}`);
     }
 
     // Check cache first
@@ -99,15 +102,66 @@ export class DataviewManager {
     }
 
     try {
-      // Load data using OpenAPI Utils
-      const data = await openAPIUtils.generateAndLoadDataView(dataview.url);
+      // Përdor endpoint-in e implementuar për të ngarkuar të dhënat
+      const baseUrl = apiConfig.getBaseUrl();
+      const endpoint = apiConfig.getEndpoint('dataviewData');
       
+      // Ndërto URL: /api/dataviews/{id}/data
+      const url = endpoint.startsWith('http')
+        ? `${endpoint}/${dataviewId}/data`
+        : baseUrl.endsWith('/')
+        ? `${baseUrl}${endpoint.startsWith('/') ? endpoint.slice(1) : endpoint}/${dataviewId}/data`
+        : `${baseUrl}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}/${dataviewId}/data`;
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: apiConfig.getHeaders(),
+        body: JSON.stringify({
+          page: 1,
+          pageSize: 50, // Default page size
+          filters: {},
+          sort: [],
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch dataview data: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      
+      // Handle different response formats
+      let data: any[] = [];
+      if (Array.isArray(result)) {
+        data = result;
+      } else if (result.data && Array.isArray(result.data)) {
+        data = result.data;
+      } else if (result.items && Array.isArray(result.items)) {
+        data = result.items;
+      } else if (result.records && Array.isArray(result.records)) {
+        data = result.records;
+      }
+
       // Cache data
       dataCache.set(cacheKey, data, 3600000); // Cache for 1 hour
 
       return data;
     } catch (error) {
       console.error(`Failed to load dataview ${dataviewId}:`, error);
+      
+      // Fallback: nëse endpoint-i nuk funksionon, provo me OpenAPI URL nëse ekziston
+      if (dataview.url) {
+        try {
+          console.log(`Trying fallback to OpenAPI URL: ${dataview.url}`);
+          const data = await openAPIUtils.generateAndLoadDataView(dataview.url);
+          const cacheKey = `dataview-data-${dataviewId}`;
+          dataCache.set(cacheKey, data, 3600000);
+          return data;
+        } catch (fallbackError) {
+          console.error(`Fallback also failed:`, fallbackError);
+        }
+      }
+      
       throw error;
     }
   }
@@ -181,20 +235,21 @@ export class DataviewManager {
    */
   getDataview(dataviewId: string): Dataview | null {
     // Check map first
-    let dataview = this.dataviewsMap.get(dataviewId);
-    if (dataview) {
-      return dataview;
+    const cachedDataview = this.dataviewsMap.get(dataviewId);
+    if (cachedDataview) {
+      return cachedDataview;
     }
 
     // Check loaded pages in RemoteArray
     const allLoaded = this.list.getAllLoadedData();
-    dataview = allLoaded.find((dv: Dataview) => dv.id === dataviewId) || null;
+    const foundDataview = allLoaded.find((dv: Dataview) => dv.id === dataviewId);
     
-    if (dataview) {
-      this.dataviewsMap.set(dataviewId, dataview);
+    if (foundDataview) {
+      this.dataviewsMap.set(dataviewId, foundDataview);
+      return foundDataview;
     }
 
-    return dataview;
+    return null;
   }
 
   /**

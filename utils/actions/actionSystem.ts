@@ -168,8 +168,8 @@ export class ActionHandler {
 
   private static async openModalAction(eventArgs: ActionEventArgs, args?: Record<string, any>): Promise<void> {
     // Dispatch custom event to open modal
-    const modalId = args?.modalId || args?.componentId || eventArgs.component?.id;
-    const modalType = args?.modalType || eventArgs.component?.props?.modal?.type;
+    const modalId = args?.modalId || args?.componentId || eventArgs.sender?.key;
+    const modalType = args?.modalType || (eventArgs.sender?.modal as any)?.type;
     
     window.dispatchEvent(
       new CustomEvent('formx:openModal', {
@@ -180,8 +180,8 @@ export class ActionHandler {
 
   private static async closeModalAction(eventArgs: ActionEventArgs, args?: Record<string, any>): Promise<void> {
     // Dispatch custom event to close modal
-    const modalId = args?.modalId || args?.componentId || eventArgs.component?.id;
-    const modalType = args?.modalType || eventArgs.component?.props?.modal?.type;
+    const modalId = args?.modalId || args?.componentId || eventArgs.sender?.key;
+    const modalType = args?.modalType || (eventArgs.sender?.modal as any)?.type;
     
     window.dispatchEvent(
       new CustomEvent('formx:closeModal', {

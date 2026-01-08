@@ -19,6 +19,7 @@ import { useFormBuilderStore } from '../../stores/formBuilderStore';
 import { useFormDataStore } from '../../stores/formDataStore';
 import { useFormComponent } from '../../hooks/useFormComponent';
 import { resolveArrayDataSourceSync } from '../../utils/data/dataSourceResolver';
+import { useBuilderDataStore } from '../../stores/builderDataStore';
 
 interface FormDataBrowseProps {
   component: ComponentDefinition;
@@ -27,6 +28,7 @@ interface FormDataBrowseProps {
 const FormDataBrowse: React.FC<FormDataBrowseProps> = ({ component }) => {
   const { selectComponent, selectedComponentId, formMode, findComponent } = useFormBuilderStore();
   const { data, getAllData, getData } = useFormDataStore();
+  const { getDataviewData } = useBuilderDataStore();
   const isSelected = selectedComponentId === component.id;
   
   const {
@@ -55,8 +57,18 @@ const FormDataBrowse: React.FC<FormDataBrowseProps> = ({ component }) => {
                      [];
   
   // Resolve data from various sources (sync version for useMemo)
-  // Note: For async sources like dataview references, use useEffect instead
+  // Në builder mode, nëse dataSource është dataview reference (string), merr të dhënat nga builder store
   const resolvedData = useMemo(() => {
+    // Në builder mode, kontrollo dataview reference
+    if (!formMode && typeof dataSource === 'string' && dataSource) {
+      const builderData = getDataviewData(dataSource);
+      if (builderData && Array.isArray(builderData)) {
+        // Shfaq të dhënat aktuale për preview në builder
+        return builderData;
+      }
+    }
+    
+    // Form mode ose static data - logjika ekzistuese
     return resolveArrayDataSourceSync({
       source: dataSource,
       formData: data,
@@ -64,7 +76,7 @@ const FormDataBrowse: React.FC<FormDataBrowseProps> = ({ component }) => {
       getAllData,
       getData,
     });
-  }, [dataSource, data, latestComponent, getAllData, getData]);
+  }, [dataSource, data, latestComponent, getAllData, getData, formMode, getDataviewData]);
   
   const columns = latestComponent.props?.columns || [];
   const label = latestComponent.props?.label || 'Data Browse';

@@ -8,6 +8,7 @@ import { useFormDataStore } from '../../stores/formDataStore';
 import { ActionHandler } from '../../utils/actions/actionSystem';
 import { ConditionalRenderer } from '../../utils/rendering/conditionalRendering';
 import { resolveArrayDataSourceSync } from '../../utils/data/dataSourceResolver';
+import { useBuilderDataStore } from '../../stores/builderDataStore';
 import DraggableComponent from '../builder/DraggableComponent';
 
 interface FormRepeaterProps {
@@ -17,6 +18,7 @@ interface FormRepeaterProps {
 const FormRepeater: React.FC<FormRepeaterProps> = ({ component }) => {
   const { selectComponent, selectedComponentId, formMode, updateComponent, findComponent } = useFormBuilderStore();
   const { data, getAllData, getData } = useFormDataStore();
+  const { getDataviewData } = useBuilderDataStore();
   const isSelected = selectedComponentId === component.id;
   const { setNodeRef, isOver } = useDroppable({
     id: component.id,
@@ -43,9 +45,20 @@ const FormRepeater: React.FC<FormRepeaterProps> = ({ component }) => {
   const itemRenderWhen = latestComponent.props?.itemRenderWhen;
   
   // Get data provider items using resolver (supports array, function, computed property, dataKey, JSON string)
-  // Note: For async sources like dataview references, use useEffect instead
+  // Në builder mode, nëse dataSource është dataview reference (string), merr të dhënat nga builder store
   const dataProviderItems = useMemo(() => {
     if (!dataSource) return [];
+    
+    // Në builder mode, kontrollo dataview reference
+    if (!formMode && typeof dataSource === 'string' && dataSource) {
+      const builderData = getDataviewData(dataSource);
+      if (builderData && Array.isArray(builderData)) {
+        // Shfaq të dhënat aktuale për preview në builder
+        return builderData;
+      }
+    }
+    
+    // Form mode ose static data - logjika ekzistuese
     return resolveArrayDataSourceSync({
       source: dataSource,
       formData: data,
@@ -53,7 +66,7 @@ const FormRepeater: React.FC<FormRepeaterProps> = ({ component }) => {
       getAllData,
       getData,
     });
-  }, [dataSource, data, latestComponent, getAllData, getData]);
+  }, [dataSource, data, latestComponent, getAllData, getData, formMode, getDataviewData]);
 
   // Use data provider items if available, otherwise use component children
   const items = useMemo(() => {

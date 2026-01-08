@@ -4,14 +4,16 @@ import type { ComponentDefinition } from '../../stores/types';
 import { useFormBuilderStore } from '../../stores/formBuilderStore';
 import { useFormDataStore } from '../../stores/formDataStore';
 import { resolveArrayDataSourceSync } from '../../utils/data/dataSourceResolver';
+import { useBuilderDataStore } from '../../stores/builderDataStore';
 
 interface FormAutoCompleteProps {
   component: ComponentDefinition;
 }
 
 const FormAutoComplete: React.FC<FormAutoCompleteProps> = ({ component }) => {
-  const { selectComponent, selectedComponentId, findComponent } = useFormBuilderStore();
+  const { selectComponent, selectedComponentId, formMode, findComponent } = useFormBuilderStore();
   const { data, getAllData, getData } = useFormDataStore();
+  const { getDataviewData } = useBuilderDataStore();
   const isSelected = selectedComponentId === component.id;
 
   // Get latest component
@@ -29,8 +31,20 @@ const FormAutoComplete: React.FC<FormAutoCompleteProps> = ({ component }) => {
                         [];
   
   // Resolve data from various sources (sync version for useMemo)
-  // Note: For async sources like dataview references, use useEffect instead
+  // Në builder mode, nëse optionsSource është dataview reference (string), merr të dhënat nga builder store
   const options = useMemo(() => {
+    // Në builder mode, kontrollo dataview reference
+    if (!formMode && typeof optionsSource === 'string' && optionsSource) {
+      const builderData = getDataviewData(optionsSource);
+      if (builderData && Array.isArray(builderData)) {
+        // Shfaq të dhënat aktuale për preview në builder
+        return builderData.map((item: any) => {
+          return typeof item === 'string' ? item : item;
+        });
+      }
+    }
+    
+    // Form mode ose static data - logjika ekzistuese
     return resolveArrayDataSourceSync({
       source: optionsSource,
       formData: data,
@@ -38,7 +52,7 @@ const FormAutoComplete: React.FC<FormAutoCompleteProps> = ({ component }) => {
       getAllData,
       getData,
     });
-  }, [optionsSource, data, latestComponent, getAllData, getData]);
+  }, [optionsSource, data, latestComponent, getAllData, getData, formMode, getDataviewData]);
   
   const placeholder = latestComponent.props?.placeholder || 'Type to search...';
   const variant = latestComponent.props?.variant || 'outlined';

@@ -15,11 +15,17 @@ import {
   IconButton,
   CircularProgress,
   InputAdornment,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
+  Chip,
 } from '@mui/material';
 import {
   Search as SearchIcon,
   Close as CloseIcon,
   FolderOpen as BrowseIcon,
+  ExpandMore as ExpandMoreIcon,
+  Code as CodeIcon,
 } from '@mui/icons-material';
 // Note: @mui/x-data-grid needs to be installed: npm install @mui/x-data-grid
 // For now, using MUI Table instead
@@ -33,6 +39,7 @@ import {
   Checkbox,
 } from '@mui/material';
 import type { Dataview } from '../../stores/types';
+import { getDataviewManager } from '../../utils/dataviews/dataviewManager';
 
 export interface AutoBrowseProps {
   value?: any[];
@@ -62,6 +69,10 @@ const AutoBrowse: React.FC<AutoBrowseProps> = ({
   const [open, setOpen] = useState(false);
   const [searchText, setSearchText] = useState('');
   const [selectedRows, setSelectedRows] = useState<any[]>(value);
+  const [selectedDataviewResponse, setSelectedDataviewResponse] = useState<any>(null);
+  const [selectedDataviewFields, setSelectedDataviewFields] = useState<string[]>([]);
+  const [loadingResponse, setLoadingResponse] = useState(false);
+  const [expandedResponse, setExpandedResponse] = useState(false);
 
   // Filter dataviews based on search text
   const filteredData = useMemo(() => {
@@ -107,11 +118,17 @@ const AutoBrowse: React.FC<AutoBrowseProps> = ({
   const handleOpen = () => {
     setOpen(true);
     setSearchText('');
+    setSelectedDataviewResponse(null);
+    setSelectedDataviewFields([]);
+    setExpandedResponse(false);
   };
 
   const handleClose = () => {
     setOpen(false);
     setSearchText('');
+    setSelectedDataviewResponse(null);
+    setSelectedDataviewFields([]);
+    setExpandedResponse(false);
   };
 
   const handleSelect = () => {
@@ -129,6 +146,44 @@ const AutoBrowse: React.FC<AutoBrowseProps> = ({
     setSelectedRows(selectedItems);
   };
 
+  const handleRowClick = async (row: any) => {
+    // Toggle selection
+    const isSelected = selectedRows.some(
+      (selected) => (selected.id || selected[valueField]) === row.id
+    );
+    if (isSelected) {
+      setSelectedRows(selectedRows.filter((r) => r.id !== row.id));
+      setSelectedDataviewResponse(null);
+      setSelectedDataviewFields([]);
+    } else {
+      setSelectedRows([...selectedRows, row]);
+      
+      // Load response data for this dataview
+      const dataviewId = row[valueField] || row.id;
+      if (dataviewId) {
+        setLoadingResponse(true);
+        try {
+          const dataviewManager = getDataviewManager();
+          
+          // Load fields
+          const fields = await dataviewManager.loadDataviewFields(dataviewId);
+          setSelectedDataviewFields(fields);
+          
+          // Load data (response)
+          const data = await dataviewManager.loadDataview(dataviewId);
+          setSelectedDataviewResponse(data);
+          setExpandedResponse(true);
+        } catch (error) {
+          console.error('Failed to load dataview response:', error);
+          setSelectedDataviewResponse(null);
+          setSelectedDataviewFields([]);
+        } finally {
+          setLoadingResponse(false);
+        }
+      }
+    }
+  };
+
   // Get display value for Autocomplete
   const displayValue = useMemo(() => {
     if (value.length === 0) {
@@ -140,17 +195,23 @@ const AutoBrowse: React.FC<AutoBrowseProps> = ({
     return `${value.length} items selected`;
   }, [value]);
 
+  // Debug: Log dataProvider
+  React.useEffect(() => {
+    console.log('AutoBrowse dataProvider:', dataProvider.length, dataProvider);
+  }, [dataProvider]);
+
   return (
     <Box>
       <Autocomplete
         value={displayValue}
-        options={dataProvider}
+        options={dataProvider || []}
         getOptionLabel={(option) => {
           if (typeof option === 'string') return option;
-          return option[labelField] || option.name || option[valueField] || '';
+          return option[labelField] || option.name || option[valueField] || option.id || '';
         }}
         disabled={disabled}
         loading={loading}
+        noOptionsText={loading ? 'Loading dataviews...' : 'No dataviews available'}
         onChange={(event, newValue) => {
           if (newValue) {
             onChange?.([newValue]);
@@ -254,13 +315,7 @@ const AutoBrowse: React.FC<AutoBrowseProps> = ({
                       <TableRow
                         key={row.id}
                         hover
-                        onClick={() => {
-                          if (isSelected) {
-                            setSelectedRows(selectedRows.filter((r) => r.id !== row.id));
-                          } else {
-                            setSelectedRows([...selectedRows, row]);
-                          }
-                        }}
+                        onClick={() => handleRowClick(row)}
                         selected={isSelected}
                         sx={{ cursor: 'pointer' }}
                       >
@@ -284,6 +339,88 @@ const AutoBrowse: React.FC<AutoBrowseProps> = ({
               </Box>
             )}
           </Box>
+
+          {/* Response and Fields Section */}
+          {selectedRows.length > 0 && (
+            <Box sx={{ mb: 2 }}>
+              <Accordion 
+                expanded={expandedResponse} 
+                onChange={(e, isExpanded) => setExpandedResponse(isExpanded)}
+              >
+                <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <CodeIcon />
+                    <Typography variant="subtitle2">
+                      API Response & Parsed Fields
+                      {loadingResponse && <CircularProgress size={16} sx={{ ml: 1 }} />}
+                    </Typography>
+                  </Box>
+                </AccordionSummary>
+                <AccordionDetails>
+                  {loadingResponse ? (
+                    <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+                      <CircularProgress />
+                    </Box>
+                  ) : (
+                    <>
+                      {/* Parsed Fields */}
+                      {selectedDataviewFields.length > 0 && (
+                        <Box sx={{ mb: 2 }}>
+                          <Typography variant="caption" sx={{ fontWeight: 600, display: 'block', mb: 1 }}>
+                            Parsed Fields ({selectedDataviewFields.length}):
+                          </Typography>
+                          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                            {selectedDataviewFields.map((field) => (
+                              <Chip
+                                key={field}
+                                label={field}
+                                size="small"
+                                color="primary"
+                                variant="outlined"
+                              />
+                            ))}
+                          </Box>
+                        </Box>
+                      )}
+
+                      {/* Raw Response */}
+                      {selectedDataviewResponse !== null && (
+                        <Box>
+                          <Typography variant="caption" sx={{ fontWeight: 600, display: 'block', mb: 1 }}>
+                            Raw API Response:
+                          </Typography>
+                          <Box
+                            sx={{
+                              p: 1,
+                              bgcolor: 'grey.100',
+                              borderRadius: 1,
+                              maxHeight: 300,
+                              overflow: 'auto',
+                              fontFamily: 'monospace',
+                              fontSize: '0.75rem',
+                            }}
+                          >
+                            <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                              {JSON.stringify(selectedDataviewResponse, null, 2)}
+                            </pre>
+                          </Box>
+                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                            Records: {Array.isArray(selectedDataviewResponse) ? selectedDataviewResponse.length : 'N/A'}
+                          </Typography>
+                        </Box>
+                      )}
+
+                      {!selectedDataviewResponse && !loadingResponse && (
+                        <Typography variant="body2" color="text.secondary">
+                          Click on a dataview row to load its response and fields
+                        </Typography>
+                      )}
+                    </>
+                  )}
+                </AccordionDetails>
+              </Accordion>
+            </Box>
+          )}
 
           {/* Footer Actions */}
           <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>

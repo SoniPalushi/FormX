@@ -65,13 +65,54 @@ class OpenAPIUtils {
   }
 
   /**
-   * Generate and load dataview data from OpenAPI URL
+   * Generate and load dataview data from OpenAPI URL or direct POST endpoint
    */
   async generateAndLoadDataView(
     url: string,
     recordsPerPage: number = 50
   ): Promise<any[]> {
     try {
+      // Check if URL is a direct POST endpoint (not an OpenAPI spec)
+      // Detekto nëse është endpoint direkt që përdor POST
+      const isDirectEndpoint = url.includes('/api/') && (
+        url.endsWith('/Post') || 
+        url.endsWith('/Get') || 
+        url.match(/\/api\/[^/]+\/[^/]+$/) ||
+        (!url.endsWith('.yaml') && !url.endsWith('.yml') && !url.endsWith('.json') && !url.includes('openapi'))
+      );
+
+      if (isDirectEndpoint) {
+        // Direct endpoint - call it directly with POST method
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: apiConfig.getHeaders(),
+          body: JSON.stringify({
+            page: 1,
+            pageSize: recordsPerPage,
+            filters: {},
+            sort: [],
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to fetch data: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        
+        // Handle different response formats
+        if (Array.isArray(data)) {
+          return data;
+        } else if (data.items && Array.isArray(data.items)) {
+          return data.items;
+        } else if (data.data && Array.isArray(data.data)) {
+          return data.data;
+        }
+
+        return [];
+      }
+
+      // Original OpenAPI spec logic (për OpenAPI specs)
       const client = await this.get(url);
       
       // Try to find a GET endpoint that returns an array
