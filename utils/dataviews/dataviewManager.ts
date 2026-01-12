@@ -245,14 +245,49 @@ export class DataviewManager {
   /**
    * Load dataview data using Gaia OpenAPI pattern
    * Similar to OpenAPI_utils.generateAndLoadDataView in obviaversion
+   * 
+   * For cascading dropdowns, filterData contains the filter parameters
+   * (e.g., { state_code: "AL" } to filter cities by state)
    */
   private async loadDataviewGaia(dataview: Dataview, filterData?: any): Promise<any[]> {
     // Get OpenAPI YAML URL for this dataview
     const yamlUrl = dataview.url || apiConfig.getGaiaDataviewYamlUrl(dataview.name);
     
-    console.log(`Loading dataview from Gaia OpenAPI: ${yamlUrl}`);
+    console.log(`Loading dataview from Gaia OpenAPI: ${yamlUrl}`, filterData ? `with filters: ${JSON.stringify(filterData)}` : '');
     
-    // Use OpenAPI utils to load data
+    // Try to load with filters if we have a direct POST endpoint
+    // For Gaia, dataviews typically have a POST endpoint that accepts filters
+    if (filterData && Object.keys(filterData).length > 0) {
+      try {
+        // Try to call the dataview POST endpoint directly with filters
+        // Format: https://gaia.oxana.io/api/{dataview_name}/Post
+        const dataviewName = dataview.name || dataview.id;
+        const baseUrl = apiConfig.getGaiaBaseUrl();
+        const postUrl = `${baseUrl}/${dataviewName}/Post`;
+        
+        const response = await fetch(postUrl, {
+          method: 'POST',
+          headers: apiConfig.getHeaders(),
+          body: JSON.stringify({
+            tableData: {
+              currentRecord: 0,
+              recordsPerPage: this.recordsPerPage,
+            },
+            advancedSqlFilters: filterData,
+          }),
+        });
+        
+        if (response.ok) {
+          const result = await response.json();
+          const items = result.data || result.items || result.records || result;
+          return Array.isArray(items) ? items : [];
+        }
+      } catch (error) {
+        console.warn('Failed to load with server-side filters, falling back to client-side filtering:', error);
+      }
+    }
+    
+    // Fallback: Use OpenAPI utils to load data, then apply client-side filtering
     const data = await openAPIUtils.generateAndLoadDataView(yamlUrl, this.recordsPerPage);
     
     // Apply client-side filtering if filterData is provided

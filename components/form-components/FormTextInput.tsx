@@ -31,6 +31,8 @@ const FormTextInput: React.FC<FormTextInputProps> = ({ component }) => {
     wrapperResponsiveSx,
     wrapperResponsiveCss,
     shouldRender,
+    computedDisabled,
+    computedRequired,
     handleChange,
     handleClick,
     handleFocus,
@@ -41,8 +43,9 @@ const FormTextInput: React.FC<FormTextInputProps> = ({ component }) => {
   // Get component props from latest component
   const variant = latestComponent.props?.variant || 'outlined';
   const fullWidth = latestComponent.props?.fullWidth !== false;
-  const required = latestComponent.props?.required || false;
-  const disabled = latestComponent.props?.disabled || false;
+  // Use dependency-computed required and disabled, fallback to props
+  const required = computedRequired !== undefined ? computedRequired : (latestComponent.props?.required || false);
+  const disabled = computedDisabled !== undefined ? computedDisabled : (latestComponent.props?.disabled || false);
   const type = latestComponent.props?.type || 'text';
   const maxLength = latestComponent.props?.maxLength;
   const pattern = latestComponent.props?.pattern;

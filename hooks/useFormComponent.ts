@@ -11,6 +11,7 @@ import { ActionHandler } from '../utils/actions/actionSystem';
 import { ComputedPropertyEvaluator } from '../utils/properties/computedProperties';
 import { ConditionalRenderer } from '../utils/rendering/conditionalRendering';
 import { ResponsiveStyleResolver } from '../utils/styles/responsiveStyles';
+import { useDependencies } from './useDependencies';
 import type { ComponentDefinition } from '../stores/types';
 import type { ComponentProperty, ActionData, ValidationSchema, ActionEventArgs, ComponentStore } from '../stores/types/formEngine';
 
@@ -43,6 +44,12 @@ interface UseFormComponentReturn {
   // Conditional rendering
   shouldRender: boolean;
   
+  // Dependency-based computed values
+  computedDisabled: boolean;
+  computedRequired: boolean;
+  computedVisible: boolean;
+  filterParams: Record<string, any>;
+  
   // Event handlers
   handleChange: (value: any) => void;
   handleClick: (event: React.MouseEvent) => void;
@@ -73,6 +80,28 @@ export function useFormComponent({ component, formMode = false }: UseFormCompone
   const dataKey = latestComponent.props?.dataKey as string | undefined;
   const disableDataBinding = latestComponent.props?.disableDataBinding || false;
   
+  // Get dependencies configuration
+  const dependencies = latestComponent.props?.dependencies as any;
+  
+  // Evaluate dependencies (disabled, enabled, visible, required, label, placeholder, filterParams, etc.)
+  const {
+    computedDisabled: depDisabled,
+    computedRequired: depRequired,
+    computedVisible: depVisible,
+    computedLabel: depLabel,
+    computedPlaceholder: depPlaceholder,
+    computedValue: depValue,
+    filterParams,
+  } = useDependencies({
+    dependencies,
+    dataKey,
+    formMode,
+    defaultDisabled: latestComponent.props?.disabled || false,
+    defaultRequired: latestComponent.props?.required || false,
+    defaultLabel: latestComponent.props?.label as string | undefined,
+    defaultPlaceholder: latestComponent.props?.placeholder as string | undefined,
+  });
+  
   // Get bound value from store if data binding is enabled
   const boundValue = useMemo(() => {
     if (!formMode || disableDataBinding || !dataKey) {
@@ -89,21 +118,34 @@ export function useFormComponent({ component, formMode = false }: UseFormCompone
   }, [formMode, disableDataBinding, dataKey, setData]);
   
   // Computed properties - reactive to data changes
+  // Use dependency-computed label if available, otherwise use prop-based computed label
   const computedLabel = useMemo(() => {
+    // If dependency provides a label, use it
+    if (depLabel !== undefined) {
+      return depLabel;
+    }
+    
+    // Otherwise, use existing computed property logic
     const labelProp = latestComponent.props?.label;
     if (typeof labelProp === 'object' && labelProp !== null) {
       return evaluateProperty(labelProp as ComponentProperty);
     }
     return labelProp as string | undefined;
-  }, [latestComponent.props?.label, data, evaluateProperty]); // Add data dependency
+  }, [depLabel, latestComponent.props?.label, data, evaluateProperty]);
 
   const computedValue = useMemo(() => {
+    // If dependency provides a computed value, use it
+    if (depValue !== undefined) {
+      return depValue;
+    }
+    
+    // Otherwise, use existing logic
     const valueProp = latestComponent.props?.value;
     if (typeof valueProp === 'object' && valueProp !== null) {
       return evaluateProperty(valueProp as ComponentProperty);
     }
     return boundValue;
-  }, [latestComponent.props?.value, boundValue, data, evaluateProperty]); // Add data dependency
+  }, [depValue, latestComponent.props?.value, boundValue, data, evaluateProperty]);
 
   const computedHelperText = useMemo(() => {
     const helperTextProp = latestComponent.props?.helperText || latestComponent.props?.helpText;
@@ -111,15 +153,21 @@ export function useFormComponent({ component, formMode = false }: UseFormCompone
       return evaluateProperty(helperTextProp as ComponentProperty);
     }
     return helperTextProp as string | undefined;
-  }, [latestComponent.props?.helperText, latestComponent.props?.helpText, data, evaluateProperty]); // Add data dependency
+  }, [latestComponent.props?.helperText, latestComponent.props?.helpText, data, evaluateProperty]);
 
   const computedPlaceholder = useMemo(() => {
+    // If dependency provides a placeholder, use it
+    if (depPlaceholder !== undefined) {
+      return depPlaceholder;
+    }
+    
+    // Otherwise, use existing logic
     const placeholderProp = latestComponent.props?.placeholder;
     if (typeof placeholderProp === 'object' && placeholderProp !== null) {
       return evaluateProperty(placeholderProp as ComponentProperty);
     }
     return placeholderProp as string | undefined;
-  }, [latestComponent.props?.placeholder, data, evaluateProperty]); // Add data dependency
+  }, [depPlaceholder, latestComponent.props?.placeholder, data, evaluateProperty]);
   
   // Validation
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -195,11 +243,18 @@ export function useFormComponent({ component, formMode = false }: UseFormCompone
   }, [latestComponent.props?.wrapperCss, deviceType]);
   
   // Conditional rendering - reactive to data changes
+  // Combine renderWhen prop with dependency-based visibility
   const shouldRender = useMemo(() => {
+    // First check dependency-based visibility
+    if (formMode && depVisible === false) {
+      return false;
+    }
+    
+    // Then check renderWhen prop
     const renderWhen = latestComponent.props?.renderWhen as ComponentProperty<boolean> | undefined;
     if (!renderWhen) return true;
     return ConditionalRenderer.shouldRender(renderWhen, data);
-  }, [latestComponent.props?.renderWhen, data]); // Already has data dependency
+  }, [formMode, depVisible, latestComponent.props?.renderWhen, data]);
   
   // Tooltip properties - reactive to data changes
   const tooltipTitle = useMemo(() => {
@@ -378,6 +433,11 @@ export function useFormComponent({ component, formMode = false }: UseFormCompone
     wrapperResponsiveSx,
     wrapperResponsiveCss,
     shouldRender,
+    // Dependency-based computed values
+    computedDisabled: depDisabled,
+    computedRequired: depRequired,
+    computedVisible: depVisible,
+    filterParams,
     handleChange,
     handleClick,
     handleFocus,

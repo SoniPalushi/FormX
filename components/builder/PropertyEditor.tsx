@@ -25,6 +25,7 @@ import EventHandlerEditor from './EventHandlerEditor';
 import ComputedPropertyEditor from './ComputedPropertyEditor';
 import ResponsiveStylesEditor from './ResponsiveStylesEditor';
 import ConditionalRenderingEditor from './ConditionalRenderingEditor';
+import DependencyEditor from './DependencyEditor';
 import AutoBrowse from './AutoBrowse';
 // Import store directly for getState()
 import { useFormBuilderStore } from '../../stores/formBuilderStore';
@@ -135,9 +136,26 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
       newProps[key] = value;
     }
 
-    updateComponent(component.id, {
-      props: newProps,
-    });
+    // Special handling: if dataKey changes, auto-update component.name if name wasn't explicitly set
+    if (key === 'dataKey' && value) {
+      const currentName = currentComponent.name;
+      const oldDataKey = currentComponent.props?.dataKey;
+      // Only auto-update name if it's not explicitly set or matches old dataKey
+      if (!currentName || currentName === oldDataKey) {
+        updateComponent(component.id, {
+          props: newProps,
+          name: value, // Auto-update name to match new dataKey
+        });
+      } else {
+        updateComponent(component.id, {
+          props: newProps,
+        });
+      }
+    } else {
+      updateComponent(component.id, {
+        props: newProps,
+      });
+    }
     
     // Reset flag and add to history after update completes
     setTimeout(() => {
@@ -3213,6 +3231,20 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
             formData={{}}
             onChange={(renderWhen) => handlePropertyChange('renderWhen', renderWhen)}
           />
+          </Box>
+        )}
+
+        {/* Dependencies Section - for form input components */}
+        {['TextInput', 'TextArea', 'Select', 'DropDown', 'CheckBox', 'RadioGroup', 'Toggle', 'DateTime', 'DateTimeCb', 'Amount', 'AutoComplete', 'AutoBrowse'].includes(componentWithProps.type) && (
+          <Box sx={{ mt: 2, p: 1.5, borderTop: '1px solid', borderColor: 'divider' }}>
+            <Typography variant="overline" sx={{ display: 'block', mb: 1.5, fontSize: '0.7rem', color: 'text.secondary', fontWeight: 600 }}>
+              Field Dependencies
+            </Typography>
+            <DependencyEditor
+              dependencies={componentWithProps.props?.dependencies}
+              componentId={componentWithProps.id}
+              onChange={(dependencies) => handlePropertyChange('dependencies', dependencies)}
+            />
           </Box>
         )}
 

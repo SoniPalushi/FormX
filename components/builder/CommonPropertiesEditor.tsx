@@ -261,21 +261,22 @@ export const CommonPropertiesEditor: React.FC<CommonPropertiesEditorProps> = ({
         </Accordion>
       )}
 
-      {/* ID/Name - Important for form inputs */}
+      {/* Data Key - Important for form inputs (data binding) */}
       {isFormInput && (
         <>
           <TextField
-            label="ID / Name"
-            value={component.props?.id || component.props?.name || ''}
+            label="Data Key"
+            value={component.props?.dataKey || ''}
             onChange={(e) => {
-              const value = e.target.value;
-              onPropertyChange('id', value);
-              onPropertyChange('name', value);
+              const value = e.target.value.trim();
+              onPropertyChange('dataKey', value || undefined);
+              // Note: Component name will auto-update to match dataKey if not explicitly set
             }}
             size="small"
             fullWidth
             sx={{ mt: 1 }}
-            helperText="Used for form submission and element identification"
+            helperText="Field name for form data binding (e.g., 'customerName', 'email')"
+            placeholder="e.g., customerName"
             InputProps={{
               sx: { fontSize: '0.8125rem' },
             }}
@@ -285,6 +286,7 @@ export const CommonPropertiesEditor: React.FC<CommonPropertiesEditorProps> = ({
           />
         </>
       )}
+
 
       {/* Required - For form inputs */}
       {isFormInput && (

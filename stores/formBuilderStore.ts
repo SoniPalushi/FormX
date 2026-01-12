@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { type ComponentDefinition, type FormBuilderState } from './types';
+import { generateComponentId, generateGuid, generateComponentName } from '../utils/idGenerator';
 
 // Work Area Layout types
 export interface LayoutSection {
@@ -152,12 +153,36 @@ const addComponentRecursive = (
   });
 };
 
+// Helper function to collect all existing component names
+const collectExistingNames = (components: ComponentDefinition[]): Set<string> => {
+  const names = new Set<string>();
+  const collect = (comps: ComponentDefinition[]) => {
+    for (const comp of comps) {
+      if (comp.name) names.add(comp.name);
+      if (comp.props?.dataKey) names.add(comp.props.dataKey);
+      if (comp.children) collect(comp.children);
+    }
+  };
+  collect(components);
+  return names;
+};
+
 // Helper function to recursively duplicate a component and its children
-const duplicateComponentRecursive = (component: ComponentDefinition): ComponentDefinition => {
+const duplicateComponentRecursive = (
+  component: ComponentDefinition,
+  existingNames: Set<string>
+): ComponentDefinition => {
+  // Generate new unique name for duplicate
+  const baseName = component.name || component.props?.dataKey || component.type.toLowerCase();
+  const newName = generateComponentName(baseName + '_copy', component.type, existingNames);
+  existingNames.add(newName);
+  
   return {
     ...component,
-    id: `component-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-    children: component.children?.map((child) => duplicateComponentRecursive(child)),
+    id: generateComponentId(component.type),
+    guid: generateGuid(),
+    name: newName,
+    children: component.children?.map((child) => duplicateComponentRecursive(child, existingNames)),
   };
 };
 
@@ -176,6 +201,9 @@ export const useFormBuilderStore = create<FormBuilderStore>((set, get) => ({
   
   addComponent: (component, parentId, index) =>
     set((state) => {
+      // Collect existing names to avoid duplicates
+      const existingNames = collectExistingNames(state.components);
+      
       // Check if parent is a Grid to set default column span
       let gridColumnSpan: Record<string, number> | undefined;
       if (parentId) {
@@ -198,9 +226,20 @@ export const useFormBuilderStore = create<FormBuilderStore>((set, get) => ({
         }
       }
       
-      const newComponent = {
+      // Generate proper IDs if not provided
+      // Note: dataKey should be set by user in Property Editor, not auto-generated
+      const dataKey = component.props?.dataKey as string | undefined;
+      // Generate name from dataKey if provided, otherwise from type
+      // Name is used for dependency references and defaults to dataKey
+      const componentName = component.name || (dataKey 
+        ? generateComponentName(dataKey, component.type, existingNames)
+        : generateComponentName(undefined, component.type, existingNames));
+      
+      const newComponent: ComponentDefinition = {
         ...component,
-        id: component.id || `component-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        id: component.id || generateComponentId(component.type),
+        guid: component.guid || generateGuid(),
+        name: componentName,
         parentId,
         // Merge grid column span with existing props if parent is Grid
         ...(gridColumnSpan && {
@@ -245,7 +284,9 @@ export const useFormBuilderStore = create<FormBuilderStore>((set, get) => ({
       const component = findComponentRecursive(state.components, id);
       if (!component) return state;
       
-      const duplicated = duplicateComponentRecursive(component);
+      // Collect existing names to avoid duplicates
+      const existingNames = collectExistingNames(state.components);
+      const duplicated = duplicateComponentRecursive(component, existingNames);
       const parentId = component.parentId;
       
       return {
@@ -263,7 +304,7 @@ export const useFormBuilderStore = create<FormBuilderStore>((set, get) => ({
       
       // Add to new location
       return {
-        components: addComponentRecursive(withoutComponent, component, newParentId, newIndex),
+        components: addComponentRecursive(withoutComponent, component, newParentId || undefined, newIndex),
       };
     }),
 
@@ -283,7 +324,9 @@ export const useFormBuilderStore = create<FormBuilderStore>((set, get) => ({
     if (layout) {
       // When setting a new layout, create container components for each section
       const sectionComponents: ComponentDefinition[] = layout.sections.map((section) => ({
-        id: `section-${section.id}`,
+        id: generateComponentId('Container'),
+        guid: generateGuid(),
+        name: `section_${section.id}`,
         type: 'Container' as const,
         props: {
           sectionId: section.id,

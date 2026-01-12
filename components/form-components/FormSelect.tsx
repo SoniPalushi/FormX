@@ -7,6 +7,7 @@ import { useFormComponent } from '../../hooks/useFormComponent';
 import { useComponentProperties } from '../../hooks/useComponentProperties';
 import { ComputedPropertyEvaluator } from '../../utils/properties/computedProperties';
 import { useBuilderDataStore } from '../../stores/builderDataStore';
+import { getDataviewManager } from '../../utils/dataviews/dataviewManager';
 
 interface FormSelectProps {
   component: ComponentDefinition;
@@ -32,6 +33,9 @@ const FormSelect: React.FC<FormSelectProps> = ({ component }) => {
     wrapperResponsiveSx,
     wrapperResponsiveCss,
     shouldRender,
+    computedDisabled,
+    computedRequired,
+    filterParams,
     handleChange,
     handleClick,
     handleFocus,
@@ -45,6 +49,47 @@ const FormSelect: React.FC<FormSelectProps> = ({ component }) => {
   const formData = useFormDataStore((state) => state.data);
   const { getAllData, getData } = useFormDataStore();
   const { getDataviewData } = useBuilderDataStore();
+  
+  // State for loading dataview data with filters
+  const [filteredDataviewData, setFilteredDataviewData] = React.useState<any[]>([]);
+  const [isLoadingDataview, setIsLoadingDataview] = React.useState(false);
+  
+  // Load dataview data with filters when filterParams change
+  React.useEffect(() => {
+    if (!formMode || !optionsSource || typeof optionsSource !== 'string') {
+      return;
+    }
+    
+    // Check if it's a dataview reference and we have filter params
+    const hasFilters = filterParams && Object.keys(filterParams).length > 0;
+    if (!hasFilters) {
+      // No filters, use cached data from builder store
+      const builderData = getDataviewData(optionsSource);
+      if (builderData && Array.isArray(builderData)) {
+        setFilteredDataviewData(builderData);
+      } else {
+        setFilteredDataviewData([]);
+      }
+      return;
+    }
+    
+    // Load dataview with filters
+    const loadFilteredData = async () => {
+      setIsLoadingDataview(true);
+      try {
+        const dataviewManager = getDataviewManager();
+        const data = await dataviewManager.loadDataview(optionsSource, filterParams);
+        setFilteredDataviewData(Array.isArray(data) ? data : []);
+      } catch (error) {
+        console.error('Error loading filtered dataview data:', error);
+        setFilteredDataviewData([]);
+      } finally {
+        setIsLoadingDataview(false);
+      }
+    };
+    
+    loadFilteredData();
+  }, [formMode, optionsSource, filterParams, getDataviewData]);
   
   const options = React.useMemo(() => {
     if (!optionsSource) return [];
@@ -68,7 +113,41 @@ const FormSelect: React.FC<FormSelectProps> = ({ component }) => {
       }
     }
     
-    // Form mode ose static data - logjika ekzistuese
+    // Form mode - use filtered dataview data if available
+    if (formMode && typeof optionsSource === 'string') {
+      // Check if we have filtered data loaded
+      if (filteredDataviewData.length > 0 || isLoadingDataview) {
+        const valueField = latestComponent.props?.valueField || 'id';
+        const labelField = latestComponent.props?.labelField || 'name';
+        
+        return filteredDataviewData.map((item: any) => {
+          const value = item[valueField] !== undefined ? item[valueField] : item.id;
+          const label = item[labelField] !== undefined ? item[labelField] : item.name || value || String(item);
+          
+          return typeof item === 'string' 
+            ? item 
+            : { value, label };
+        });
+      }
+      
+      // Fallback to builder store data if no filters
+      const builderData = getDataviewData(optionsSource);
+      if (builderData && Array.isArray(builderData)) {
+        const valueField = latestComponent.props?.valueField || 'id';
+        const labelField = latestComponent.props?.labelField || 'name';
+        
+        return builderData.map((item: any) => {
+          const value = item[valueField] !== undefined ? item[valueField] : item.id;
+          const label = item[labelField] !== undefined ? item[labelField] : item.name || value || String(item);
+          
+          return typeof item === 'string' 
+            ? item 
+            : { value, label };
+        });
+      }
+    }
+    
+    // Static data - logjika ekzistuese
     // If it's already an array, use it directly
     if (Array.isArray(optionsSource)) {
       return optionsSource;
@@ -101,24 +180,6 @@ const FormSelect: React.FC<FormSelectProps> = ({ component }) => {
     
     // If it's a string (could be JSON, dataKey, or dataview reference)
     if (typeof optionsSource === 'string') {
-      // Në form mode, kontrollo dataview reference
-      if (formMode) {
-        const builderData = getDataviewData(optionsSource);
-        if (builderData && Array.isArray(builderData)) {
-          const valueField = latestComponent.props?.valueField || 'id';
-          const labelField = latestComponent.props?.labelField || 'name';
-          
-          return builderData.map((item: any) => {
-            const value = item[valueField] !== undefined ? item[valueField] : item.id;
-            const label = item[labelField] !== undefined ? item[labelField] : item.name || value || String(item);
-            
-            return typeof item === 'string' 
-              ? item 
-              : { value, label };
-          });
-        }
-      }
-      
       try {
         // Try parsing as JSON first
         const parsed = JSON.parse(optionsSource);
@@ -131,12 +192,13 @@ const FormSelect: React.FC<FormSelectProps> = ({ component }) => {
     }
     
     return [];
-  }, [optionsSource, latestComponent, formData, getData, formMode, getDataviewData]); // Added formMode and getDataviewData dependencies
+  }, [optionsSource, latestComponent, formData, getData, formMode, getDataviewData, filteredDataviewData, isLoadingDataview]);
   
   const variant = latestComponent.props?.variant || 'outlined';
   const fullWidth = latestComponent.props?.fullWidth !== false;
-  const required = latestComponent.props?.required || false;
-  const disabled = latestComponent.props?.disabled || false;
+  // Use dependency-computed required and disabled, fallback to props
+  const required = computedRequired !== undefined ? computedRequired : (latestComponent.props?.required || false);
+  const disabled = computedDisabled !== undefined ? computedDisabled : (latestComponent.props?.disabled || false);
   const multiple = latestComponent.props?.multiple || false;
   const size = latestComponent.props?.size || 'medium';
   const width = latestComponent.props?.width;
