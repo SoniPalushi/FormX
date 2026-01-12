@@ -10,8 +10,15 @@ import {
   Box,
   Typography,
   Divider,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
+  Tooltip,
+  IconButton,
 } from '@mui/material';
+import { ExpandMore as ExpandMoreIcon, GridOn as GridIcon, Clear as ClearIcon } from '@mui/icons-material';
 import type { ComponentDefinition } from '../../stores/types';
+import { useFormBuilderStore } from '../../stores/formBuilderStore';
 
 interface CommonPropertiesEditorProps {
   component: ComponentDefinition;
@@ -21,10 +28,64 @@ interface CommonPropertiesEditorProps {
 /**
  * Common properties that most form components should have
  */
+// Default dimensions for different component types
+const getDefaultDimensions = (type: string): { width: string; height: string } => {
+  switch (type) {
+    case 'Select':
+    case 'DropDown':
+    case 'AutoComplete':
+      return { width: '300px', height: 'auto' };
+    case 'TextInput':
+      return { width: '300px', height: 'auto' };
+    case 'TextArea':
+      return { width: '100%', height: '120px' };
+    case 'Button':
+      return { width: 'auto', height: 'auto' };
+    case 'Label':
+    case 'Heading':
+      return { width: 'auto', height: 'auto' };
+    case 'Image':
+      return { width: '200px', height: '150px' };
+    case 'Container':
+      return { width: '100%', height: '100px' };
+    case 'Grid':
+      return { width: '100%', height: '150px' };
+    case 'CheckBox':
+    case 'Toggle':
+      return { width: 'auto', height: 'auto' };
+    case 'RadioGroup':
+    case 'CheckBoxGroup':
+      return { width: '100%', height: 'auto' };
+    case 'DateTime':
+    case 'DateTimeCb':
+      return { width: '250px', height: 'auto' };
+    case 'Upload':
+    case 'MultiUpload':
+      return { width: '100%', height: '150px' };
+    case 'DataGrid':
+      return { width: '100%', height: '400px' };
+    case 'Repeater':
+    case 'RepeaterEx':
+      return { width: '100%', height: 'auto' };
+    default:
+      return { width: '100%', height: 'auto' };
+  }
+};
+
 export const CommonPropertiesEditor: React.FC<CommonPropertiesEditorProps> = ({
   component,
   onPropertyChange,
 }) => {
+  const { findComponentParent } = useFormBuilderStore();
+  
+  // Check if component is inside a Grid
+  const parent = findComponentParent(component.id);
+  const isInsideGrid = parent?.type === 'Grid';
+  const gridColumns = parent?.props?.columns || 6;
+  
+  // Get default dimensions for this component type
+  const defaultDimensions = getDefaultDimensions(component.type);
+  
   // Determine if this is a form input component
   const isFormInput = [
     'TextInput',
@@ -52,12 +113,153 @@ export const CommonPropertiesEditor: React.FC<CommonPropertiesEditorProps> = ({
     'ViewStack',
   ].includes(component.type);
 
+  // Column span options based on 12-column grid
+  const columnSpanOptions = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+  
   return (
     <Box>
       <Typography variant="overline" sx={{ display: 'block', mb: 0.75, mt: 1.5, fontSize: '0.7rem', color: 'text.secondary', fontWeight: 600 }}>
         Common Properties
       </Typography>
       <Divider sx={{ mb: 1.5 }} />
+
+      {/* Grid Column Span - Only show when inside a Grid */}
+      {isInsideGrid && (
+        <Accordion 
+          defaultExpanded 
+          sx={{ 
+            mb: 1.5, 
+            '&:before': { display: 'none' },
+            boxShadow: 'none',
+            border: '1px solid',
+            borderColor: 'primary.light',
+            borderRadius: '4px !important',
+            bgcolor: 'primary.50',
+          }}
+        >
+          <AccordionSummary
+            expandIcon={<ExpandMoreIcon />}
+            sx={{ 
+              minHeight: 40,
+              '& .MuiAccordionSummary-content': { my: 0.5 },
+              bgcolor: 'primary.light',
+              borderRadius: '4px 4px 0 0',
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <GridIcon fontSize="small" color="primary" />
+              <Typography variant="subtitle2" sx={{ fontSize: '0.8rem', fontWeight: 600, color: 'primary.dark' }}>
+                Grid Column Span
+              </Typography>
+              <Typography variant="caption" sx={{ color: 'primary.main', ml: 0.5 }}>
+                (Parent: {gridColumns} columns)
+              </Typography>
+            </Box>
+          </AccordionSummary>
+          <AccordionDetails sx={{ pt: 1.5, pb: 1.5 }}>
+            <Typography variant="caption" sx={{ display: 'block', mb: 1.5, color: 'text.secondary' }}>
+              Set how many columns this component spans at different screen sizes (out of 12)
+            </Typography>
+            
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              {/* XS - Extra Small (phones) */}
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Tooltip title="Extra small devices (phones, 0px and up)">
+                  <Typography variant="caption" sx={{ width: 30, fontWeight: 600 }}>XS:</Typography>
+                </Tooltip>
+                <FormControl size="small" sx={{ flex: 1 }}>
+                  <Select
+                    value={component.props?.xs || component.props?.columnSpan || Math.floor(12 / gridColumns) || 12}
+                    onChange={(e) => onPropertyChange('xs', Number(e.target.value))}
+                  >
+                    {columnSpanOptions.map((span) => (
+                      <MenuItem key={span} value={span}>
+                        {span} col{span > 1 ? 's' : ''} ({Math.round((span / 12) * 100)}%)
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Box>
+              
+              {/* SM - Small (tablets) */}
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Tooltip title="Small devices (tablets, 600px and up)">
+                  <Typography variant="caption" sx={{ width: 30, fontWeight: 600 }}>SM:</Typography>
+                </Tooltip>
+                <FormControl size="small" sx={{ flex: 1 }}>
+                  <Select
+                    value={component.props?.sm || component.props?.xs || component.props?.columnSpan || Math.floor(12 / gridColumns) || 12}
+                    onChange={(e) => onPropertyChange('sm', Number(e.target.value))}
+                  >
+                    {columnSpanOptions.map((span) => (
+                      <MenuItem key={span} value={span}>
+                        {span} col{span > 1 ? 's' : ''} ({Math.round((span / 12) * 100)}%)
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Box>
+              
+              {/* MD - Medium (small laptops) */}
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Tooltip title="Medium devices (small laptops, 900px and up)">
+                  <Typography variant="caption" sx={{ width: 30, fontWeight: 600 }}>MD:</Typography>
+                </Tooltip>
+                <FormControl size="small" sx={{ flex: 1 }}>
+                  <Select
+                    value={component.props?.md || component.props?.sm || component.props?.xs || component.props?.columnSpan || Math.floor(12 / gridColumns) || 12}
+                    onChange={(e) => onPropertyChange('md', Number(e.target.value))}
+                  >
+                    {columnSpanOptions.map((span) => (
+                      <MenuItem key={span} value={span}>
+                        {span} col{span > 1 ? 's' : ''} ({Math.round((span / 12) * 100)}%)
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Box>
+              
+              {/* LG - Large (desktops) */}
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Tooltip title="Large devices (desktops, 1200px and up)">
+                  <Typography variant="caption" sx={{ width: 30, fontWeight: 600 }}>LG:</Typography>
+                </Tooltip>
+                <FormControl size="small" sx={{ flex: 1 }}>
+                  <Select
+                    value={component.props?.lg || component.props?.md || component.props?.sm || component.props?.xs || component.props?.columnSpan || Math.floor(12 / gridColumns) || 12}
+                    onChange={(e) => onPropertyChange('lg', Number(e.target.value))}
+                  >
+                    {columnSpanOptions.map((span) => (
+                      <MenuItem key={span} value={span}>
+                        {span} col{span > 1 ? 's' : ''} ({Math.round((span / 12) * 100)}%)
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Box>
+              
+              {/* XL - Extra Large (large desktops) */}
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Tooltip title="Extra large devices (large desktops, 1536px and up)">
+                  <Typography variant="caption" sx={{ width: 30, fontWeight: 600 }}>XL:</Typography>
+                </Tooltip>
+                <FormControl size="small" sx={{ flex: 1 }}>
+                  <Select
+                    value={component.props?.xl || component.props?.lg || component.props?.md || component.props?.sm || component.props?.xs || component.props?.columnSpan || Math.floor(12 / gridColumns) || 12}
+                    onChange={(e) => onPropertyChange('xl', Number(e.target.value))}
+                  >
+                    {columnSpanOptions.map((span) => (
+                      <MenuItem key={span} value={span}>
+                        {span} col{span > 1 ? 's' : ''} ({Math.round((span / 12) * 100)}%)
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Box>
+            </Box>
+          </AccordionDetails>
+        </Accordion>
+      )}
 
       {/* ID/Name - Important for form inputs */}
       {isFormInput && (
@@ -342,34 +544,43 @@ export const CommonPropertiesEditor: React.FC<CommonPropertiesEditorProps> = ({
       )}
 
       {/* Width */}
-      <Box sx={{ mt: 1 }}>
-        <Typography variant="caption" sx={{ display: 'block', mb: 0.5 }}>
-          Width
-        </Typography>
+      <Box sx={{ mt: 1.5 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
+          <Typography variant="caption" sx={{ fontWeight: 600 }}>
+            Width
+          </Typography>
+          <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.65rem' }}>
+            Default: {defaultDimensions.width}
+          </Typography>
+        </Box>
         <Box sx={{ display: 'flex', gap: 1 }}>
           <TextField
             label="Value"
             value={component.props?.width || ''}
-            onChange={(e) => onPropertyChange('width', e.target.value)}
-            onBlur={(e) => {
-              const value = e.target.value.trim();
-              if (value && value !== component.props?.width) {
+            onChange={(e) => {
+              const value = e.target.value;
+              if (value === '') {
+                // Allow clearing - remove the property
+                onPropertyChange('width', undefined);
+              } else {
                 onPropertyChange('width', value);
-              }
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                const value = (e.target as HTMLInputElement).value.trim();
-                if (value && value !== component.props?.width) {
-                  onPropertyChange('width', value);
-                }
-                (e.target as HTMLInputElement).blur();
               }
             }}
             size="small"
             sx={{ flex: 2 }}
-            placeholder="100% or 200px"
+            placeholder={defaultDimensions.width}
+            helperText={component.props?.width ? '' : `Default: ${defaultDimensions.width}`}
+            InputProps={{
+              endAdornment: component.props?.width ? (
+                <IconButton
+                  size="small"
+                  onClick={() => onPropertyChange('width', undefined)}
+                  sx={{ p: 0.25 }}
+                >
+                  <ClearIcon fontSize="small" />
+                </IconButton>
+              ) : null,
+            }}
           />
           <FormControl sx={{ flex: 1 }}>
             <InputLabel>Unit</InputLabel>
@@ -383,7 +594,8 @@ export const CommonPropertiesEditor: React.FC<CommonPropertiesEditorProps> = ({
               }
               label="Unit"
               onChange={(e) => {
-                const currentValue = component.props?.width?.replace(/[^0-9]/g, '') || '';
+                const currentWidth = component.props?.width || '';
+                const currentValue = currentWidth?.replace(/[^0-9]/g, '') || '';
                 if (e.target.value === 'percent') {
                   onPropertyChange('width', currentValue ? `${currentValue}%` : '100%');
                 } else if (e.target.value === 'pixels') {
@@ -403,18 +615,43 @@ export const CommonPropertiesEditor: React.FC<CommonPropertiesEditorProps> = ({
       </Box>
 
       {/* Height */}
-      <Box sx={{ mt: 1 }}>
-        <Typography variant="caption" sx={{ display: 'block', mb: 0.5 }}>
-          Height
-        </Typography>
+      <Box sx={{ mt: 1.5 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
+          <Typography variant="caption" sx={{ fontWeight: 600 }}>
+            Height
+          </Typography>
+          <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.65rem' }}>
+            Default: {defaultDimensions.height}
+          </Typography>
+        </Box>
         <Box sx={{ display: 'flex', gap: 1 }}>
           <TextField
             label="Value"
             value={component.props?.height || ''}
-            onChange={(e) => onPropertyChange('height', e.target.value)}
+            onChange={(e) => {
+              const value = e.target.value;
+              if (value === '') {
+                // Allow clearing - remove the property
+                onPropertyChange('height', undefined);
+              } else {
+                onPropertyChange('height', value);
+              }
+            }}
             size="small"
             sx={{ flex: 2 }}
-            placeholder="auto or 100px"
+            placeholder={defaultDimensions.height}
+            helperText={component.props?.height ? '' : `Default: ${defaultDimensions.height}`}
+            InputProps={{
+              endAdornment: component.props?.height ? (
+                <IconButton
+                  size="small"
+                  onClick={() => onPropertyChange('height', undefined)}
+                  sx={{ p: 0.25 }}
+                >
+                  <ClearIcon fontSize="small" />
+                </IconButton>
+              ) : null,
+            }}
           />
           <FormControl sx={{ flex: 1 }}>
             <InputLabel>Unit</InputLabel>
@@ -428,7 +665,8 @@ export const CommonPropertiesEditor: React.FC<CommonPropertiesEditorProps> = ({
               }
               label="Unit"
               onChange={(e) => {
-                const currentValue = component.props?.height?.replace(/[^0-9]/g, '') || '';
+                const currentHeight = component.props?.height || '';
+                const currentValue = currentHeight?.replace(/[^0-9]/g, '') || '';
                 if (e.target.value === 'percent') {
                   onPropertyChange('height', currentValue ? `${currentValue}%` : '100%');
                 } else if (e.target.value === 'pixels') {

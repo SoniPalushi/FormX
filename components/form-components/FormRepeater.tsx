@@ -16,7 +16,7 @@ interface FormRepeaterProps {
 }
 
 const FormRepeater: React.FC<FormRepeaterProps> = ({ component }) => {
-  const { selectComponent, selectedComponentId, formMode, updateComponent, findComponent } = useFormBuilderStore();
+  const { selectComponent, selectedComponentId, formMode, updateComponent, findComponent, components } = useFormBuilderStore();
   const { data, getAllData, getData } = useFormDataStore();
   const { getDataviewData } = useBuilderDataStore();
   const isSelected = selectedComponentId === component.id;
@@ -27,10 +27,10 @@ const FormRepeater: React.FC<FormRepeaterProps> = ({ component }) => {
     },
   });
 
-  // Get latest component
+  // Get latest component - subscribe to components array for real-time updates
   const latestComponent = useMemo(() => {
     return findComponent(component.id) || component;
-  }, [component.id, findComponent]);
+  }, [component.id, components, findComponent]);
 
   const label = latestComponent.props?.label || 'Repeater';
   const minItems = latestComponent.props?.min || latestComponent.props?.minItems || 0;
@@ -109,13 +109,13 @@ const FormRepeater: React.FC<FormRepeaterProps> = ({ component }) => {
         };
         await ActionHandler.executeActions(addRowActions, eventArgs);
       } else {
-        // Default: add empty item to data provider
-        if (Array.isArray(dataProvider)) {
-          const newItems = [...dataProvider, {}];
+        // Default: add empty item to data source
+        if (Array.isArray(dataSource)) {
+          const newItems = [...dataSource, {}];
           updateComponent(component.id, {
             props: {
               ...latestComponent.props,
-              dataProvider: newItems,
+              dataSource: newItems,
             },
           });
         }
@@ -124,7 +124,7 @@ const FormRepeater: React.FC<FormRepeaterProps> = ({ component }) => {
       // In builder mode, add a new child component
       // This would need to be handled by the builder
     }
-  }, [canAdd, formMode, latestComponent, data, dataProvider, component.id, updateComponent]);
+  }, [canAdd, formMode, latestComponent, data, dataSource, component.id, updateComponent]);
 
   // Remove row handler
   const handleRemoveRow = useCallback(async (index: number) => {
@@ -145,13 +145,13 @@ const FormRepeater: React.FC<FormRepeaterProps> = ({ component }) => {
         };
         await ActionHandler.executeActions(removeRowActions, eventArgs);
       } else {
-        // Default: remove item from data provider
-        if (Array.isArray(dataProvider)) {
-          const newItems = dataProvider.filter((_: any, i: number) => i !== index);
+        // Default: remove item from data source
+        if (Array.isArray(dataSource)) {
+          const newItems = dataSource.filter((_: any, i: number) => i !== index);
           updateComponent(component.id, {
             props: {
               ...latestComponent.props,
-              dataProvider: newItems,
+              dataSource: newItems,
             },
           });
         }
@@ -162,7 +162,7 @@ const FormRepeater: React.FC<FormRepeaterProps> = ({ component }) => {
         // This would need to be handled by the builder's deleteComponent
       }
     }
-  }, [canRemove, formMode, latestComponent, data, dataProvider, items, component.id, updateComponent]);
+  }, [canRemove, formMode, latestComponent, data, dataSource, items, component.id, updateComponent]);
 
   // Check if item should render
   const shouldRenderItem = useCallback((item: any, index: number) => {

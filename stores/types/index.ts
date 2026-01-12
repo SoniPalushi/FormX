@@ -52,7 +52,8 @@ export type ComponentType =
   | 'RequiredFieldValidator'
   | 'RangeValidator'
   | 'RegExValidator'
-  | 'DataBrowse';
+  | 'DataBrowse'
+  | 'Grid';
 
 export interface ComponentLibraryItem {
   componentNameLabel: string;

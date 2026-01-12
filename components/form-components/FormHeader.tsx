@@ -3,6 +3,8 @@ import { Box, AppBar, Toolbar, Typography } from '@mui/material';
 import { useDroppable } from '@dnd-kit/core';
 import type { ComponentDefinition } from '../../stores/types';
 import { useFormBuilderStore } from '../../stores/formBuilderStore';
+import { useFormComponent } from '../../hooks/useFormComponent';
+import { useComponentProperties } from '../../hooks/useComponentProperties';
 import DraggableComponent from '../builder/DraggableComponent';
 
 interface FormHeaderProps {
@@ -10,13 +12,21 @@ interface FormHeaderProps {
 }
 
 const FormHeader: React.FC<FormHeaderProps> = ({ component }) => {
-  const { selectComponent, selectedComponentId, formMode, components, findComponent } = useFormBuilderStore();
+  const { selectComponent, selectedComponentId, formMode } = useFormBuilderStore();
   const isSelected = selectedComponentId === component.id;
   
-  // Get latest component from store to ensure real-time updates
-  const latestComponent = React.useMemo(() => {
-    return findComponent(component.id) || component;
-  }, [component.id, components, findComponent]);
+  // Get dynamic properties using reusable hook
+  const { latestComponent, className, getSxStyles } = useComponentProperties({ component, formMode });
+  
+  // Use the form component hook for conditional rendering and computed properties
+  const {
+    computedLabel,
+    responsiveSx,
+    wrapperResponsiveSx,
+    shouldRender,
+    handleClick,
+    htmlAttributes,
+  } = useFormComponent({ component: latestComponent, formMode });
   
   const { setNodeRef, isOver } = useDroppable({
     id: latestComponent.id,
@@ -26,9 +36,14 @@ const FormHeader: React.FC<FormHeaderProps> = ({ component }) => {
     disabled: formMode,
   });
 
-  const title = latestComponent.props?.title || latestComponent.props?.text || 'Header';
+  const title = computedLabel || latestComponent.props?.title || latestComponent.props?.text || 'Header';
   const position = latestComponent.props?.position || 'static';
   const color = latestComponent.props?.color || 'primary';
+
+  // Don't render if conditional rendering says no
+  if (!shouldRender) {
+    return null;
+  }
 
   return (
     <Box
@@ -37,6 +52,8 @@ const FormHeader: React.FC<FormHeaderProps> = ({ component }) => {
         if (!formMode) {
           e.stopPropagation();
           selectComponent(component.id);
+        } else {
+          handleClick(e);
         }
       }}
       sx={{
@@ -46,21 +63,28 @@ const FormHeader: React.FC<FormHeaderProps> = ({ component }) => {
           ? '2px dashed #1976d2'
           : '2px solid transparent',
         borderRadius: 1,
-        cursor: 'pointer',
+        cursor: formMode ? 'default' : 'pointer',
         position: 'relative',
         mb: 1,
+        ...getSxStyles({
+          includeMinDimensions: !formMode,
+          additionalSx: wrapperResponsiveSx,
+        }),
       }}
+      className={`${formMode ? '' : 'form-builder-header'} ${className}`.trim()}
+      style={htmlAttributes}
     >
       <AppBar
         position={position as any}
         color={color as any}
         sx={{
-          bgcolor: isOver ? 'action.hover' : undefined,
+          bgcolor: isOver && !formMode ? 'action.hover' : undefined,
+          ...responsiveSx,
         }}
       >
         <Toolbar>
-          {component.children && component.children.length > 0 ? (
-            component.children.map((child) => (
+          {latestComponent.children && latestComponent.children.length > 0 ? (
+            latestComponent.children.map((child) => (
               <DraggableComponent key={child.id} component={child} />
             ))
           ) : (
@@ -75,4 +99,3 @@ const FormHeader: React.FC<FormHeaderProps> = ({ component }) => {
 };
 
 export default FormHeader;
-

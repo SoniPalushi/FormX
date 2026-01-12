@@ -108,7 +108,7 @@ const FormAmount: React.FC<FormAmountProps> = ({ component }) => {
           ),
         }}
         helperText={displayHelperText}
-        error={hasError}
+        error={hasError || undefined}
         size={size as any}
         onClick={(e) => {
           if (!formMode) {

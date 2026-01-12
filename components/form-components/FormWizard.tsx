@@ -11,6 +11,8 @@ import {
 import { useDroppable } from '@dnd-kit/core';
 import type { ComponentDefinition } from '../../stores/types';
 import { useFormBuilderStore } from '../../stores/formBuilderStore';
+import { useFormComponent } from '../../hooks/useFormComponent';
+import { useComponentProperties } from '../../hooks/useComponentProperties';
 import DraggableComponent from '../builder/DraggableComponent';
 
 interface FormWizardProps {
@@ -21,16 +23,37 @@ const FormWizard: React.FC<FormWizardProps> = ({ component }) => {
   const { selectComponent, selectedComponentId, formMode } = useFormBuilderStore();
   const isSelected = selectedComponentId === component.id;
   const [activeStep, setActiveStep] = useState(0);
+  
+  // Get dynamic properties using reusable hook
+  const { latestComponent, className, getSxStyles } = useComponentProperties({ component, formMode });
+  
+  // Use the form component hook for conditional rendering and computed properties
+  const {
+    computedLabel,
+    responsiveSx,
+    wrapperResponsiveSx,
+    shouldRender,
+    handleClick,
+    htmlAttributes,
+  } = useFormComponent({ component: latestComponent, formMode });
+  
   const { setNodeRef, isOver } = useDroppable({
-    id: component.id,
+    id: latestComponent.id,
     data: {
       accepts: ['component'],
     },
     disabled: formMode, // Disable droppable in form mode
   });
 
-  const steps = component.props?.steps || ['Step 1', 'Step 2', 'Step 3'];
-  const label = component.props?.label || 'Wizard';
+  const steps = latestComponent.props?.steps || ['Step 1', 'Step 2', 'Step 3'];
+  const label = computedLabel || latestComponent.props?.label || 'Wizard';
+  const orientation = latestComponent.props?.orientation || 'horizontal';
+  const alternativeLabel = latestComponent.props?.alternativeLabel || false;
+
+  // Don't render if conditional rendering says no
+  if (!shouldRender) {
+    return null;
+  }
 
   const handleNext = () => {
     setActiveStep((prev) => Math.min(prev + 1, steps.length - 1));
@@ -47,6 +70,8 @@ const FormWizard: React.FC<FormWizardProps> = ({ component }) => {
         if (!formMode) {
           e.stopPropagation();
           selectComponent(component.id);
+        } else {
+          handleClick(e);
         }
       }}
       sx={{
@@ -56,16 +81,23 @@ const FormWizard: React.FC<FormWizardProps> = ({ component }) => {
           ? '2px dashed #1976d2'
           : '2px solid transparent',
         borderRadius: 1,
-        p: 0.5,
-        cursor: 'pointer',
+        p: formMode ? 0 : 0.5,
+        cursor: formMode ? 'default' : 'pointer',
         position: 'relative',
+        ...getSxStyles({
+          includeMinDimensions: !formMode,
+          additionalSx: wrapperResponsiveSx,
+        }),
       }}
+      className={`${formMode ? '' : 'form-builder-wizard'} ${className}`.trim()}
+      style={htmlAttributes}
     >
       <Paper
         sx={{
           p: 3,
-          bgcolor: isOver ? 'action.hover' : 'background.paper',
+          bgcolor: isOver && !formMode ? 'action.hover' : 'background.paper',
           minHeight: 300,
+          ...responsiveSx,
         }}
       >
         {label && (
@@ -74,7 +106,12 @@ const FormWizard: React.FC<FormWizardProps> = ({ component }) => {
           </Typography>
         )}
 
-        <Stepper activeStep={activeStep} sx={{ mb: 4 }}>
+        <Stepper 
+          activeStep={activeStep} 
+          orientation={orientation as any}
+          alternativeLabel={alternativeLabel}
+          sx={{ mb: 4 }}
+        >
           {steps.map((step: string, index: number) => (
             <Step key={index}>
               <StepLabel>{step}</StepLabel>
@@ -83,8 +120,8 @@ const FormWizard: React.FC<FormWizardProps> = ({ component }) => {
         </Stepper>
 
         <Box sx={{ minHeight: 200, mb: 3 }}>
-          {component.children && component.children.length > 0 ? (
-            component.children
+          {latestComponent.children && latestComponent.children.length > 0 ? (
+            latestComponent.children
               .filter((_, index) => index === activeStep)
               .map((child) => (
                 <DraggableComponent key={child.id} component={child} />
@@ -123,4 +160,3 @@ const FormWizard: React.FC<FormWizardProps> = ({ component }) => {
 };
 
 export default FormWizard;
-

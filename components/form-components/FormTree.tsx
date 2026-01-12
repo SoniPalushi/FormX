@@ -30,15 +30,15 @@ interface TreeNode {
 }
 
 const FormTree: React.FC<FormTreeProps> = ({ component }) => {
-  const { selectComponent, selectedComponentId, findComponent } = useFormBuilderStore();
+  const { selectComponent, selectedComponentId, findComponent, components } = useFormBuilderStore();
   const { data, getAllData, getData } = useFormDataStore();
   const isSelected = selectedComponentId === component.id;
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
-  // Get latest component
+  // Get latest component - subscribe to components array for real-time updates
   const latestComponent = useMemo(() => {
     return findComponent(component.id) || component;
-  }, [component.id, findComponent]);
+  }, [component.id, components, findComponent]);
 
   // Support multiple data source types: data, treeData, dataSource
   const dataSource = latestComponent.props?.dataSource || 

@@ -26,6 +26,7 @@ export const componentLibrary: ComponentLibraryItem[] = [
   
   // Layout Components
   { componentNameLabel: 'Container', type: 'Container', category: 'Layout' },
+  { componentNameLabel: 'Grid', type: 'Grid', category: 'Layout' },
   { componentNameLabel: 'Form', type: 'Form', category: 'Layout' },
   { componentNameLabel: 'Header', type: 'Header', category: 'Layout' },
   { componentNameLabel: 'Footer', type: 'Footer', category: 'Layout' },

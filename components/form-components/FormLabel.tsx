@@ -16,12 +16,31 @@ const FormLabel: React.FC<FormLabelProps> = ({ component }) => {
   // Get dynamic properties using reusable hook
   const { latestComponent, className, getSxStyles } = useComponentProperties({ component, formMode });
   
-  // Use form component hook for computed properties and reactive updates
-  const { computedLabel } = useFormComponent({ component: latestComponent, formMode });
+  // Use form component hook for computed properties, responsive styles, and conditional rendering
+  const {
+    computedLabel,
+    responsiveSx,
+    wrapperResponsiveSx,
+    shouldRender,
+    handleClick,
+    htmlAttributes,
+  } = useFormComponent({ component: latestComponent, formMode });
   
   // Get text value - PropertyEditor saves it as 'text', but also check 'label' for compatibility
   // Priority: computedLabel (for computed properties) > text > label
   const text = computedLabel || latestComponent.props?.text || latestComponent.props?.label || '';
+  
+  // Typography props
+  const variant = latestComponent.props?.variant || 'body1';
+  const color = latestComponent.props?.color || 'textPrimary';
+  const align = latestComponent.props?.align || 'inherit';
+  const noWrap = latestComponent.props?.noWrap || false;
+  const gutterBottom = latestComponent.props?.gutterBottom || false;
+
+  // Don't render if conditional rendering says no
+  if (!shouldRender) {
+    return null;
+  }
 
   return (
     <Box
@@ -29,6 +48,8 @@ const FormLabel: React.FC<FormLabelProps> = ({ component }) => {
         if (!formMode) {
           e.stopPropagation();
           selectComponent(component.id);
+        } else {
+          handleClick(e);
         }
       }}
       sx={{
@@ -40,16 +61,26 @@ const FormLabel: React.FC<FormLabelProps> = ({ component }) => {
         alignItems: 'center',
         ...getSxStyles({
           includeMinDimensions: !formMode,
-          defaultMinWidth: '300px',
+          defaultMinWidth: '100px',
           defaultMinHeight: '32px',
+          additionalSx: wrapperResponsiveSx,
         }),
       }}
       className={`${formMode ? '' : 'form-builder-label'} ${className}`.trim()}
+      style={htmlAttributes}
     >
-      <Typography variant="body1">{text}</Typography>
+      <Typography 
+        variant={variant as any}
+        color={color as any}
+        align={align as any}
+        noWrap={noWrap}
+        gutterBottom={gutterBottom}
+        sx={responsiveSx}
+      >
+        {text}
+      </Typography>
     </Box>
   );
 };
 
 export default FormLabel;
-

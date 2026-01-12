@@ -16,12 +16,13 @@ interface FormTooltipProps {
 }
 
 const FormTooltip: React.FC<FormTooltipProps> = ({ component, children }) => {
-  const { formMode, findComponent } = useFormBuilderStore();
+  const { formMode, findComponent, components } = useFormBuilderStore();
   const { evaluateProperty } = useFormDataStore();
   
+  // Get latest component - subscribe to components array for real-time updates
   const latestComponent = React.useMemo(() => {
     return findComponent(component.id) || component;
-  }, [component.id, findComponent]);
+  }, [component.id, components, findComponent]);
 
   const tooltipProps = latestComponent.props?.tooltipProps;
   const tooltipType = latestComponent.props?.tooltipType || 'default';

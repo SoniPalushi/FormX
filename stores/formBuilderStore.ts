@@ -1,6 +1,24 @@
 import { create } from 'zustand';
 import { type ComponentDefinition, type FormBuilderState } from './types';
 
+// Work Area Layout types
+export interface LayoutSection {
+  id: string;
+  name: string;
+  type: 'header' | 'body' | 'footer' | 'sidebar' | 'main' | 'aside' | 'column';
+  flex?: number;
+  minHeight?: string;
+  position?: 'top' | 'bottom' | 'left' | 'right' | 'center';
+}
+
+export interface WorkAreaLayout {
+  id: string;
+  name: string;
+  description: string;
+  sections: LayoutSection[];
+  direction: 'row' | 'column';
+}
+
 interface FormBuilderStore extends FormBuilderState {
   // Actions
   setComponents: (components: ComponentDefinition[]) => void;
@@ -16,6 +34,12 @@ interface FormBuilderStore extends FormBuilderState {
   moveComponent: (id: string, newParentId: string | null, newIndex?: number) => void;
   findComponent: (id: string) => ComponentDefinition | null;
   findComponentParent: (id: string) => ComponentDefinition | null;
+  // Canvas mode: 'layout' (stacked) or 'free' (absolute positioning)
+  canvasMode: 'layout' | 'free';
+  setCanvasMode: (mode: 'layout' | 'free') => void;
+  // Work Area Layout
+  workAreaLayout: WorkAreaLayout | null;
+  setWorkAreaLayout: (layout: WorkAreaLayout | null) => void;
 }
 
 // Helper function to recursively find a component
@@ -142,18 +166,49 @@ export const useFormBuilderStore = create<FormBuilderStore>((set, get) => ({
   components: [],
   selectedComponentId: null,
   activeContainerId: null,
-  formMode: true,
+  formMode: false, // false = builder mode (editing), true = form mode (viewing)
   previewMode: null,
+  canvasMode: 'layout', // Default to layout mode (stacked components)
+  workAreaLayout: null, // No predefined layout by default
 
   // Actions
   setComponents: (components) => set({ components }),
   
   addComponent: (component, parentId, index) =>
     set((state) => {
+      // Check if parent is a Grid to set default column span
+      let gridColumnSpan: Record<string, number> | undefined;
+      if (parentId) {
+        const parent = findComponentRecursive(state.components, parentId);
+        if (parent?.type === 'Grid') {
+          // Grid columns limited to max 6
+          const gridColumns = Math.min(parent.props?.columns || 2, 6);
+          // Calculate default span: each child takes one "visual column"
+          // E.g., 2 columns = span 6 (50%), 3 columns = span 4 (33%), etc.
+          const defaultSpan = Math.floor(12 / gridColumns) || 6;
+          
+          // Set default column span based on grid configuration
+          gridColumnSpan = {
+            xs: 12, // Full width on mobile
+            sm: Math.min(defaultSpan * 2, 12), // Double span on tablets (or full width)
+            md: defaultSpan,
+            lg: defaultSpan,
+            xl: defaultSpan,
+          };
+        }
+      }
+      
       const newComponent = {
         ...component,
         id: component.id || `component-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         parentId,
+        // Merge grid column span with existing props if parent is Grid
+        ...(gridColumnSpan && {
+          props: {
+            ...component.props,
+            ...gridColumnSpan,
+          },
+        }),
       };
       return {
         components: addComponentRecursive(state.components, newComponent, parentId, index),
@@ -220,6 +275,34 @@ export const useFormBuilderStore = create<FormBuilderStore>((set, get) => ({
   findComponentParent: (id) => {
     const state = get();
     return findParentRecursive(state.components, id);
+  },
+
+  setCanvasMode: (mode) => set({ canvasMode: mode }),
+
+  setWorkAreaLayout: (layout) => {
+    if (layout) {
+      // When setting a new layout, create container components for each section
+      const sectionComponents: ComponentDefinition[] = layout.sections.map((section) => ({
+        id: `section-${section.id}`,
+        type: 'Container' as const,
+        props: {
+          sectionId: section.id,
+          sectionName: section.name,
+          sectionType: section.type,
+          flex: section.flex,
+          minHeight: section.minHeight,
+          isLayoutSection: true,
+        },
+        children: [],
+      }));
+      
+      set({ 
+        workAreaLayout: layout,
+        components: sectionComponents,
+      });
+    } else {
+      set({ workAreaLayout: null });
+    }
   },
 }));
 

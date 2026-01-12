@@ -77,7 +77,7 @@ const FormTextArea: React.FC<FormTextAreaProps> = ({ component }) => {
         }),
       }}
       className={`${formMode ? '' : 'form-builder-text-area'} ${className}`.trim()}
-      style={wrapperResponsiveCss ? { ...htmlAttributes, ...(typeof wrapperResponsiveCss === 'string' ? {} : wrapperResponsiveCss) } : htmlAttributes}
+      style={htmlAttributes}
     >
       <TextField
         label={computedLabel}

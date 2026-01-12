@@ -1665,6 +1665,93 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
           </>
         );
 
+      case 'Grid':
+        // Handler to update Grid columns and also update children's column spans
+        const handleGridColumnsChange = (newColumns: number) => {
+          // Limit to max 6 columns
+          const limitedNewColumns = Math.min(newColumns, 6);
+          const oldColumns = Math.min(componentWithProps.props?.columns || 2, 6);
+          
+          // Update the Grid's columns property
+          handlePropertyChange('columns', limitedNewColumns);
+          
+          // Update children's column spans proportionally
+          if (componentWithProps.children && componentWithProps.children.length > 0) {
+            // Calculate default span: each child takes one "visual column"
+            const newDefaultSpan = Math.floor(12 / limitedNewColumns) || 6;
+            
+            componentWithProps.children.forEach((child) => {
+              // Calculate old default span
+              const oldDefaultSpan = Math.floor(12 / oldColumns) || 6;
+              
+              const oldSpan = child.props?.md || child.props?.columnSpan || oldDefaultSpan;
+              
+              // If child was using default span, update to new default
+              const wasUsingDefault = oldSpan === oldDefaultSpan;
+              
+              const newSpan = wasUsingDefault ? newDefaultSpan : Math.min(oldSpan, 12);
+              
+              // Update child component with responsive column spans
+              updateComponent(child.id, {
+                props: {
+                  ...child.props,
+                  xs: 12, // Full width on mobile
+                  sm: Math.min(newSpan * 2, 12), // Double span on tablets
+                  md: newSpan,
+                  lg: newSpan,
+                  xl: newSpan,
+                  columnSpan: newSpan,
+                },
+              });
+            });
+          }
+        };
+        
+        return (
+          <>
+            <FormControl fullWidth size="small" sx={{ mt: 0.75 }}>
+              <InputLabel>Columns</InputLabel>
+              <Select
+                value={componentWithProps.props?.columns || 2}
+                onChange={(e) => handleGridColumnsChange(Number(e.target.value))}
+                label="Columns"
+              >
+                {[1, 2, 3, 4, 5, 6].map((num) => (
+                  <MenuItem key={num} value={num}>
+                    {num} {num === 1 ? 'Column' : 'Columns'} ({Math.round(100/num)}% each)
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <FormControl fullWidth size="small" sx={{ mt: 0.75 }}>
+              <InputLabel>Spacing</InputLabel>
+              <Select
+                value={componentWithProps.props?.spacing || 2}
+                onChange={(e) => {
+                  const value = Number(e.target.value);
+                  handlePropertyChange('spacing', value);
+                }}
+                label="Spacing"
+              >
+                {[0, 1, 2, 3, 4, 5, 6, 8].map((num) => (
+                  <MenuItem key={num} value={num}>
+                    {num === 0 ? 'None' : `${num} (${num * 8}px)`}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <TextField
+              label="Min Height"
+              value={componentWithProps.props?.height || '150px'}
+              onChange={(e) => handlePropertyChange('height', e.target.value)}
+              size="small"
+              fullWidth
+              sx={{ mt: 0.75 }}
+              helperText="e.g., 150px, 200px, auto"
+            />
+          </>
+        );
+
       case 'Repeater':
       case 'RepeaterEx':
         return (

@@ -173,7 +173,7 @@ const FormSelect: React.FC<FormSelectProps> = ({ component }) => {
         }),
       }}
       className={`${formMode ? '' : 'form-builder-select'} ${className}`.trim()}
-      style={wrapperResponsiveCss ? { ...htmlAttributes, style: wrapperResponsiveCss } : htmlAttributes}
+      style={htmlAttributes}
     >
       <FormControl 
         variant={variant as any} 
@@ -187,7 +187,6 @@ const FormSelect: React.FC<FormSelectProps> = ({ component }) => {
           minWidth: !width && !fullWidth ? '200px' : undefined,
           ...responsiveSx,
         }}
-        style={responsiveCss ? { style: responsiveCss } : undefined}
       >
         <InputLabel>{computedLabel}</InputLabel>
         <Select 

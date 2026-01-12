@@ -20,14 +20,15 @@ interface FormListProps {
 }
 
 const FormList: React.FC<FormListProps> = ({ component }) => {
-  const { selectComponent, selectedComponentId, findComponent } = useFormBuilderStore();
+  const { selectComponent, selectedComponentId, formMode, findComponent, components } = useFormBuilderStore();
   const { data, getAllData, getData } = useFormDataStore();
+  const { getDataviewData } = useBuilderDataStore();
   const isSelected = selectedComponentId === component.id;
 
-  // Get latest component
+  // Get latest component - subscribe to components array for real-time updates
   const latestComponent = useMemo(() => {
     return findComponent(component.id) || component;
-  }, [component.id, findComponent]);
+  }, [component.id, components, findComponent]);
 
   // Support multiple data source types: items, data, dataSource
   const dataSource = latestComponent.props?.dataSource || 
@@ -93,7 +94,13 @@ const FormList: React.FC<FormListProps> = ({ component }) => {
                 typeof item === 'object' ? item.avatar || item.icon : undefined;
 
               return (
-                <ListItem key={index} disabled>
+                <ListItem 
+                  key={index} 
+                  sx={{ 
+                    opacity: 0.6,
+                    pointerEvents: 'none'
+                  }}
+                >
                   {showAvatar && avatar && (
                     <ListItemAvatar>
                       <Avatar>{avatar}</Avatar>

@@ -220,11 +220,15 @@ const DraggableComponent: React.FC<DraggableComponentProps> = ({ component, chil
         </Box>
       )}
       
-      {/* Content - clickable for selection */}
+      {/* Content - clickable for selection, allows pointer events for nested droppables */}
       <Box
         sx={{
           position: 'relative',
           zIndex: 1,
+          // Important: Allow pointer events to pass through to child droppables (like Grid)
+          '& > *': {
+            pointerEvents: 'auto',
+          },
         }}
       >
         {children || <FormComponentRenderer component={latestComponent} />}

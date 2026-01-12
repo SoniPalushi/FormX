@@ -6,59 +6,110 @@ import {
   FormControlLabel,
   Radio,
   Box,
+  FormHelperText,
 } from '@mui/material';
 import type { ComponentDefinition } from '../../stores/types';
 import { useFormBuilderStore } from '../../stores/formBuilderStore';
+import { useFormComponent } from '../../hooks/useFormComponent';
+import { useComponentProperties } from '../../hooks/useComponentProperties';
 
 interface FormRadioGroupProps {
   component: ComponentDefinition;
 }
 
 const FormRadioGroup: React.FC<FormRadioGroupProps> = ({ component }) => {
-  const { selectComponent, selectedComponentId, components, findComponent } = useFormBuilderStore();
+  const { selectComponent, selectedComponentId, formMode } = useFormBuilderStore();
   const isSelected = selectedComponentId === component.id;
   
-  // Get latest component from store to ensure real-time updates
-  const latestComponent = React.useMemo(() => {
-    return findComponent(component.id) || component;
-  }, [component.id, components, findComponent]);
+  // Get dynamic properties using reusable hook
+  const { latestComponent, className, getSxStyles } = useComponentProperties({ component, formMode });
   
-  const label = latestComponent.props?.label || '';
-  const value = latestComponent.props?.value || '';
+  // Use the form component hook for all integrations
+  const {
+    computedLabel,
+    computedValue,
+    computedHelperText,
+    validationError,
+    isValid,
+    boundValue,
+    responsiveSx,
+    wrapperResponsiveSx,
+    shouldRender,
+    handleChange,
+    handleClick,
+    handleFocus,
+    handleBlur,
+    htmlAttributes,
+  } = useFormComponent({ component: latestComponent, formMode });
+  
   const options = latestComponent.props?.options || [];
   const row = latestComponent.props?.row || false;
-  
-  // Get dynamic properties
-  const margin = latestComponent.props?.margin;
-  const padding = latestComponent.props?.padding;
+  const disabled = latestComponent.props?.disabled || false;
+  const required = latestComponent.props?.required || false;
+  const size = latestComponent.props?.size || 'medium';
+  const color = latestComponent.props?.color || 'primary';
   const width = latestComponent.props?.width;
-  const height = latestComponent.props?.height;
-  const classes = latestComponent.props?.classes || latestComponent.props?.className || [];
+
+  const displayValue = formMode ? boundValue : computedValue;
+  const displayHelperText = validationError || computedHelperText || '';
+  const hasError = !!validationError || !isValid;
+
+  // Don't render if conditional rendering says no
+  if (!shouldRender) {
+    return null;
+  }
 
   return (
     <Box
       onClick={(e) => {
-        e.stopPropagation();
-        selectComponent(component.id);
+        if (!formMode) {
+          e.stopPropagation();
+          selectComponent(component.id);
+        } else {
+          handleClick(e);
+        }
       }}
       sx={{
-        border: isSelected ? '2px solid #1976d2' : '2px solid transparent',
+        border: isSelected && !formMode ? '2px solid #1976d2' : '2px solid transparent',
         borderRadius: 1,
-        p: 0.5,
-        cursor: 'pointer',
+        p: formMode ? 0 : 0.5,
+        cursor: formMode ? 'default' : 'pointer',
         display: 'block',
         width: width || 'auto',
-        height: height || 'auto',
-        margin: margin ? `${margin.top || 0}px ${margin.right || 0}px ${margin.bottom || 0}px ${margin.left || 0}px` : undefined,
-        padding: padding ? `${padding.top || 0}px ${padding.right || 0}px ${padding.bottom || 0}px ${padding.left || 0}px` : undefined,
-        minWidth: width || '300px',
-        minHeight: height || '60px',
+        ...getSxStyles({
+          includeMinDimensions: !formMode,
+          defaultMinWidth: '300px',
+          defaultMinHeight: '60px',
+          additionalSx: wrapperResponsiveSx,
+        }),
       }}
-      className={`form-builder-radio-group ${Array.isArray(classes) ? classes.join(' ') : classes || ''}`.trim()}
+      className={`${formMode ? '' : 'form-builder-radio-group'} ${className}`.trim()}
+      style={htmlAttributes}
     >
-      <FormControl disabled>
-        {label && <FormLabel>{label}</FormLabel>}
-        <RadioGroup value={value} row={row} onClick={(e) => e.stopPropagation()}>
+      <FormControl 
+        disabled={!formMode || disabled}
+        required={required}
+        error={hasError}
+        size={size as any}
+        sx={responsiveSx}
+      >
+        {computedLabel && <FormLabel>{computedLabel}</FormLabel>}
+        <RadioGroup 
+          value={displayValue || ''} 
+          row={row} 
+          onChange={(e) => {
+            if (formMode) {
+              handleChange(e.target.value);
+            }
+          }}
+          onFocus={handleFocus}
+          onBlur={handleBlur}
+          onClick={(e) => {
+            if (!formMode) {
+              e.stopPropagation();
+            }
+          }}
+        >
           {options.map((option: any, index: number) => {
             const optionValue = typeof option === 'string' ? option : option.value;
             const optionLabel = typeof option === 'string' ? option : option.label || option.value;
@@ -66,16 +117,18 @@ const FormRadioGroup: React.FC<FormRadioGroupProps> = ({ component }) => {
               <FormControlLabel
                 key={index}
                 value={optionValue}
-                control={<Radio />}
+                control={<Radio color={color as any} size={size as any} />}
                 label={optionLabel}
               />
             );
           })}
         </RadioGroup>
+        {displayHelperText && (
+          <FormHelperText>{displayHelperText}</FormHelperText>
+        )}
       </FormControl>
     </Box>
   );
 };
 
 export default FormRadioGroup;
-

@@ -19,6 +19,9 @@ import {
   ViewModule as ViewModuleIcon,
   Article as FormModeIcon,
   Code as CodeIcon,
+  ViewStream as LayoutIcon,
+  OpenWith as FreePositionIcon,
+  Dashboard as DashboardIcon,
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import { useFormBuilderStore } from '../../stores/formBuilderStore';
@@ -27,13 +30,16 @@ import { downloadPersistedForm, readFormFromFile } from '../../utils/formExport'
 import { useModeStore, useModeActions } from '../../stores/modeStore';
 import { Switch, FormControlLabel, Tooltip } from '@mui/material';
 import SaveFormDialog from './SaveFormDialog';
+import WorkAreaLayoutModal from './WorkAreaLayoutModal';
+import type { WorkAreaLayout } from '../../stores/formBuilderStore';
 
 const BuilderHeader: React.FC = () => {
   const { t } = useTranslation();
-  const { formMode, toggleFormMode, setPreviewMode, previewMode, setComponents, components } = useFormBuilderStore();
+  const { formMode, toggleFormMode, setPreviewMode, previewMode, setComponents, components, canvasMode, setCanvasMode, workAreaLayout, setWorkAreaLayout } = useFormBuilderStore();
   const { undo, redo, canUndo, canRedo } = useHistoryStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const [layoutModalOpen, setLayoutModalOpen] = useState(false);
   
   // Advanced Mode
   const advancedMode = useModeStore((state) => state.advancedMode);
@@ -225,6 +231,67 @@ const BuilderHeader: React.FC = () => {
 
           <Box sx={{ width: 1, height: 20, bgcolor: 'rgba(255,255,255,0.25)', mx: 0.5 }} />
 
+          {/* Work Area Layout Button */}
+          <Tooltip title={workAreaLayout ? `Layout: ${workAreaLayout.name}` : 'Choose Work Area Layout'}>
+            <IconButton
+              color="inherit"
+              onClick={() => setLayoutModalOpen(true)}
+              size="small"
+              sx={{
+                border: workAreaLayout ? '2px solid rgba(76, 175, 80, 0.8)' : '1px dashed rgba(255,255,255,0.5)',
+                bgcolor: workAreaLayout ? 'rgba(76, 175, 80, 0.2)' : 'transparent',
+                transition: 'all 0.3s ease',
+                '&:hover': {
+                  bgcolor: 'rgba(255,255,255,0.2)',
+                  transform: 'scale(1.1)',
+                },
+              }}
+            >
+              <DashboardIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+
+          <Box sx={{ width: 1, height: 20, bgcolor: 'rgba(255,255,255,0.25)', mx: 0.5 }} />
+
+          {/* Canvas Mode Toggle */}
+          <Tooltip title={canvasMode === 'layout' ? 'Switch to Free Positioning' : 'Switch to Layout Mode'}>
+            <ToggleButtonGroup
+              value={canvasMode}
+              exclusive
+              onChange={(_, value) => value && setCanvasMode(value)}
+              size="small"
+              sx={{
+                height: 28,
+                bgcolor: 'rgba(255,255,255,0.1)',
+                '& .MuiToggleButton-root': {
+                  px: 1,
+                  py: 0.5,
+                  borderColor: 'rgba(255,255,255,0.3)',
+                  color: 'rgba(255,255,255,0.9)',
+                  '&.Mui-selected': {
+                    bgcolor: 'rgba(255,255,255,0.2)',
+                    color: '#fff',
+                    '&:hover': {
+                      bgcolor: 'rgba(255,255,255,0.25)',
+                    },
+                  },
+                  '&:hover': {
+                    bgcolor: 'rgba(255,255,255,0.1)',
+                  },
+                },
+              }}
+            >
+              <ToggleButton value="layout" title="Layout Mode (Stacked)">
+                <LayoutIcon fontSize="small" />
+              </ToggleButton>
+              <ToggleButton value="free" title="Free Position Mode">
+                <FreePositionIcon fontSize="small" />
+              </ToggleButton>
+            </ToggleButtonGroup>
+          </Tooltip>
+
+          <Box sx={{ width: 1, height: 20, bgcolor: 'rgba(255,255,255,0.25)', mx: 0.5 }} />
+
           <ToggleButtonGroup
             value={previewMode}
             exclusive
@@ -330,6 +397,12 @@ const BuilderHeader: React.FC = () => {
         onClose={() => setSaveDialogOpen(false)}
         onSave={handleSave}
         defaultFormName="My Form"
+      />
+      <WorkAreaLayoutModal
+        open={layoutModalOpen}
+        onClose={() => setLayoutModalOpen(false)}
+        onSelect={(layout) => setWorkAreaLayout(layout)}
+        currentLayoutId={workAreaLayout?.id}
       />
     </AppBar>
   );

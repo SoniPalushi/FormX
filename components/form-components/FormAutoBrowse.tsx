@@ -120,7 +120,7 @@ const FormAutoBrowse: React.FC<FormAutoBrowseProps> = ({ component }) => {
           ) : null,
         }}
         helperText={displayHelperText}
-        error={hasError}
+        error={hasError || undefined}
         onClick={(e) => {
           if (!formMode) {
             e.stopPropagation();

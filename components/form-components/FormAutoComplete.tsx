@@ -11,15 +11,15 @@ interface FormAutoCompleteProps {
 }
 
 const FormAutoComplete: React.FC<FormAutoCompleteProps> = ({ component }) => {
-  const { selectComponent, selectedComponentId, formMode, findComponent } = useFormBuilderStore();
+  const { selectComponent, selectedComponentId, formMode, findComponent, components } = useFormBuilderStore();
   const { data, getAllData, getData } = useFormDataStore();
   const { getDataviewData } = useBuilderDataStore();
   const isSelected = selectedComponentId === component.id;
 
-  // Get latest component
+  // Get latest component - subscribe to components array for real-time updates
   const latestComponent = useMemo(() => {
     return findComponent(component.id) || component;
-  }, [component.id, findComponent]);
+  }, [component.id, components, findComponent]);
 
   const label = latestComponent.props?.label || 'AutoComplete';
   const value = latestComponent.props?.value || null;

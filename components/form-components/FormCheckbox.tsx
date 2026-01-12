@@ -1,5 +1,5 @@
 import React from 'react';
-import { FormControlLabel, Checkbox as MuiCheckbox, Box } from '@mui/material';
+import { FormControlLabel, Checkbox as MuiCheckbox, Box, FormHelperText, FormControl } from '@mui/material';
 import type { ComponentDefinition } from '../../stores/types';
 import { useFormBuilderStore } from '../../stores/formBuilderStore';
 import { useFormComponent } from '../../hooks/useFormComponent';
@@ -19,14 +19,12 @@ const FormCheckbox: React.FC<FormCheckboxProps> = ({ component }) => {
   const {
     computedLabel,
     computedValue,
+    computedHelperText,
     validationError,
     isValid,
     boundValue,
-    setBoundValue,
     responsiveSx,
-    responsiveCss,
     wrapperResponsiveSx,
-    wrapperResponsiveCss,
     shouldRender,
     handleChange,
     handleClick,
@@ -41,6 +39,7 @@ const FormCheckbox: React.FC<FormCheckboxProps> = ({ component }) => {
   
   const displayChecked = formMode ? (boundValue ?? false) : (computedValue ?? component.props?.checked ?? false);
   const hasError = !!validationError || !isValid;
+  const displayHelperText = validationError || computedHelperText || '';
 
   if (!shouldRender) return null;
 
@@ -60,7 +59,8 @@ const FormCheckbox: React.FC<FormCheckboxProps> = ({ component }) => {
         p: formMode ? 0 : 0.5,
         cursor: formMode ? 'default' : 'pointer',
         display: 'inline-flex',
-        alignItems: 'center',
+        flexDirection: 'column',
+        alignItems: 'flex-start',
         ...getSxStyles({
           includeMinDimensions: !formMode,
           defaultMinWidth: '200px',
@@ -69,43 +69,44 @@ const FormCheckbox: React.FC<FormCheckboxProps> = ({ component }) => {
         }),
       }}
       className={`${formMode ? '' : 'form-builder-checkbox'} ${className}`.trim()}
-      style={wrapperResponsiveCss ? { ...htmlAttributes, style: wrapperResponsiveCss } : htmlAttributes}
+      style={htmlAttributes}
     >
-      <FormControlLabel
-        control={
-          <MuiCheckbox 
-            checked={displayChecked} 
-            disabled={disabled}
-            indeterminate={indeterminate}
-            color={color as any}
-            size={size as any}
-            required={required}
-            error={hasError}
-            onChange={(e) => {
-              if (formMode) {
-                handleChange(e.target.checked);
-              }
-            }}
-            onClick={(e) => {
-              if (!formMode) {
-                e.stopPropagation();
-              }
-            }}
-            sx={responsiveSx}
-            style={responsiveCss ? { style: responsiveCss } : undefined}
-            {...htmlAttributes}
-          />
-        }
-        label={computedLabel || latestComponent.props?.label || ''}
-        onClick={(e) => {
-          if (!formMode) {
-            e.stopPropagation();
+      <FormControl error={hasError} required={required}>
+        <FormControlLabel
+          control={
+            <MuiCheckbox 
+              checked={displayChecked} 
+              disabled={!formMode || disabled}
+              indeterminate={indeterminate}
+              color={color as any}
+              size={size as any}
+              required={required}
+              onChange={(e) => {
+                if (formMode) {
+                  handleChange(e.target.checked);
+                }
+              }}
+              onClick={(e) => {
+                if (!formMode) {
+                  e.stopPropagation();
+                }
+              }}
+              sx={responsiveSx}
+            />
           }
-        }}
-      />
+          label={computedLabel || latestComponent.props?.label || ''}
+          onClick={(e) => {
+            if (!formMode) {
+              e.stopPropagation();
+            }
+          }}
+        />
+        {displayHelperText && (
+          <FormHelperText sx={{ ml: 0 }}>{displayHelperText}</FormHelperText>
+        )}
+      </FormControl>
     </Box>
   );
 };
 
 export default FormCheckbox;
-

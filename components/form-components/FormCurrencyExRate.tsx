@@ -102,7 +102,7 @@ const FormCurrencyExRate: React.FC<FormCurrencyExRateProps> = ({ component }) =>
             startAdornment: <InputAdornment position="start">{fromCurrency}</InputAdornment>,
           }}
           helperText={displayHelperText}
-          error={hasError}
+          error={hasError || undefined}
           onClick={(e) => {
             if (!formMode) {
               e.stopPropagation();

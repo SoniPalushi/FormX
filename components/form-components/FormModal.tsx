@@ -23,12 +23,13 @@ interface FormModalProps {
 }
 
 const FormModal: React.FC<FormModalProps> = ({ component }) => {
-  const { formMode, findComponent } = useFormBuilderStore();
+  const { formMode, findComponent, components } = useFormBuilderStore();
   const { data } = useFormDataStore();
   
+  // Get latest component - subscribe to components array for real-time updates
   const latestComponent = React.useMemo(() => {
     return findComponent(component.id) || component;
-  }, [component.id, findComponent]);
+  }, [component.id, components, findComponent]);
 
   const modalConfig = latestComponent.props?.modal;
   const [open, setOpen] = useState(false);

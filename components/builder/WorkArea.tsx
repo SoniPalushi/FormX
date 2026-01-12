@@ -27,14 +27,13 @@ const WorkArea: React.FC = () => {
         p: 1.5,
         bgcolor: 'background.default',
         ...getPreviewStyle(),
-        // Prevent workspace from reacting to drag events
         position: 'relative',
-        // Ensure workspace doesn't shift during drag
         willChange: 'auto',
       }}
     >
       <Paper
         elevation={0}
+        data-canvas-container
         sx={{
           minHeight: '100%',
           p: 2,

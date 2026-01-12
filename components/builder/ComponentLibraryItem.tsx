@@ -1,13 +1,13 @@
-import React from 'react';
-import { Paper, Typography, Box } from '@mui/material';
+import React, { memo } from 'react';
+import { Paper, Typography } from '@mui/material';
 import { useDraggable } from '@dnd-kit/core';
-import type { ComponentLibraryItem } from '../../stores/types';
+import type { ComponentLibraryItem as ComponentLibraryItemType } from '../../stores/types';
 
 interface ComponentLibraryItemProps {
-  component: ComponentLibraryItem;
+  component: ComponentLibraryItemType;
 }
 
-const ComponentLibraryItem: React.FC<ComponentLibraryItemProps> = ({ component }) => {
+const ComponentLibraryItemComponent: React.FC<ComponentLibraryItemProps> = ({ component }) => {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: `library-${component.type}`,
     data: {
@@ -34,32 +34,19 @@ const ComponentLibraryItem: React.FC<ComponentLibraryItemProps> = ({ component }
         borderRadius: 1.5,
         border: '1px solid',
         borderColor: 'divider',
-        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-        position: 'relative',
-        overflow: 'hidden',
-        '&::before': {
-          content: '""',
-          position: 'absolute',
-          top: 0,
-          left: '-100%',
-          width: '100%',
-          height: '100%',
-          background: 'linear-gradient(90deg, transparent, rgba(25, 118, 210, 0.1), transparent)',
-          transition: 'left 0.5s ease',
-        },
+        // Use specific GPU-accelerated properties instead of 'all' for better performance
+        transition: 'background-color 0.15s ease, border-color 0.15s ease, transform 0.15s ease',
+        // Use will-change to hint browser about upcoming transforms
+        willChange: 'transform, background-color',
         '&:hover': {
           bgcolor: 'primary.light',
           color: 'primary.contrastText',
           borderColor: 'primary.main',
-          transform: 'translateY(-4px) scale(1.02)',
-          boxShadow: '0 6px 16px rgba(25, 118, 210, 0.3)',
-          '&::before': {
-            left: '100%',
-          },
+          transform: 'translateY(-2px)',
         },
         '&:active': {
           cursor: 'grabbing',
-          transform: 'translateY(-2px) scale(0.98)',
+          transform: 'translateY(0)',
         },
         ...style,
       }}
@@ -71,10 +58,6 @@ const ComponentLibraryItem: React.FC<ComponentLibraryItemProps> = ({ component }
           fontSize: '0.7rem', 
           display: 'block', 
           fontWeight: 500,
-          transition: 'font-weight 0.2s ease',
-          '&:hover': {
-            fontWeight: 600,
-          },
         }}
       >
         {component.componentNameLabel}
@@ -82,6 +65,11 @@ const ComponentLibraryItem: React.FC<ComponentLibraryItemProps> = ({ component }
     </Paper>
   );
 };
+
+// Memoize the component to prevent unnecessary re-renders
+const ComponentLibraryItem = memo(ComponentLibraryItemComponent, (prevProps, nextProps) => {
+  return prevProps.component.type === nextProps.component.type;
+});
 
 export default ComponentLibraryItem;
 

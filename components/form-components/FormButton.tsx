@@ -19,9 +19,7 @@ const FormButton: React.FC<FormButtonProps> = ({ component }) => {
   const {
     computedLabel,
     responsiveSx,
-    responsiveCss,
     wrapperResponsiveSx,
-    wrapperResponsiveCss,
     shouldRender,
     handleClick,
     htmlAttributes,
@@ -29,7 +27,12 @@ const FormButton: React.FC<FormButtonProps> = ({ component }) => {
   
   const variant = latestComponent.props?.variant || 'contained';
   const color = latestComponent.props?.color || 'primary';
+  const size = latestComponent.props?.size || 'medium';
+  const disabled = latestComponent.props?.disabled || false;
+  const fullWidth = latestComponent.props?.fullWidth || false;
   const width = latestComponent.props?.width;
+  const startIcon = latestComponent.props?.startIcon;
+  const endIcon = latestComponent.props?.endIcon;
 
   if (!shouldRender) return null;
 
@@ -39,8 +42,6 @@ const FormButton: React.FC<FormButtonProps> = ({ component }) => {
         if (!formMode) {
           e.stopPropagation();
           selectComponent(component.id);
-        } else {
-          handleClick(e);
         }
       }}
       sx={{
@@ -51,7 +52,7 @@ const FormButton: React.FC<FormButtonProps> = ({ component }) => {
         display: 'inline-flex',
         alignItems: 'center',
         justifyContent: 'center',
-        width: width || 'auto',
+        width: width || (fullWidth ? '100%' : 'auto'),
         ...getSxStyles({
           includeMinDimensions: !formMode,
           defaultMinWidth: '120px',
@@ -60,22 +61,25 @@ const FormButton: React.FC<FormButtonProps> = ({ component }) => {
         }),
       }}
       className={`${formMode ? '' : 'form-builder-button'} ${className}`.trim()}
-      style={wrapperResponsiveCss ? { ...htmlAttributes, style: wrapperResponsiveCss } : htmlAttributes}
+      style={htmlAttributes}
     >
       <Button 
         variant={variant as any} 
-        color={color as any} 
-        fullWidth={!!width && width !== 'auto'}
+        color={color as any}
+        size={size as any}
+        disabled={!formMode || disabled}
+        fullWidth={fullWidth || (!!width && width !== 'auto')}
         onClick={(e) => {
-          if (!formMode) {
+          if (formMode) {
+            handleClick(e);
+          } else {
             e.stopPropagation();
           }
         }}
         sx={{
+          ...(width ? { width } : undefined),
           ...responsiveSx,
         }}
-        style={responsiveCss ? { style: responsiveCss } : undefined}
-        {...htmlAttributes}
       >
         {computedLabel || latestComponent.props?.label || latestComponent.props?.text || 'Button'}
       </Button>
@@ -84,4 +88,3 @@ const FormButton: React.FC<FormButtonProps> = ({ component }) => {
 };
 
 export default FormButton;
-

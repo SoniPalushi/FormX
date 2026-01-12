@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
   Box,
   Typography,
@@ -6,7 +6,6 @@ import {
   InputAdornment,
   Grid,
   IconButton,
-  Chip,
   Tabs,
   Tab,
 } from '@mui/material';
@@ -29,17 +28,35 @@ const ComponentsPanel: React.FC<ComponentsPanelProps> = ({ onToggle }) => {
   const { t } = useTranslation();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
-  const categories = ['All', ...getAllCategories()];
+  
+  // Memoize categories to prevent recalculation
+  const categories = useMemo(() => ['All', ...getAllCategories()], []);
   
   // Advanced Mode
   const advancedMode = useModeStore((state) => state.advancedMode);
   
-  // Filter components by mode first, then by search and category
-  const filteredComponents = filterComponentsByMode(componentLibrary, advancedMode).filter((component) => {
-    const matchesSearch = component.componentNameLabel.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = selectedCategory === 'All' || component.category === selectedCategory;
-    return matchesSearch && matchesCategory;
-  });
+  // Memoize filtered components for better performance
+  const filteredComponents = useMemo(() => {
+    const modeFiltered = filterComponentsByMode(componentLibrary, advancedMode);
+    return modeFiltered.filter((component) => {
+      const matchesSearch = component.componentNameLabel.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesCategory = selectedCategory === 'All' || component.category === selectedCategory;
+      return matchesSearch && matchesCategory;
+    });
+  }, [advancedMode, searchTerm, selectedCategory]);
+  
+  // Memoize handlers
+  const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchTerm(e.target.value);
+  }, []);
+  
+  const handleClearSearch = useCallback(() => {
+    setSearchTerm('');
+  }, []);
+  
+  const handleCategoryChange = useCallback((_: React.SyntheticEvent, newValue: string) => {
+    setSelectedCategory(newValue);
+  }, []);
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -82,7 +99,7 @@ const ComponentsPanel: React.FC<ComponentsPanelProps> = ({ onToggle }) => {
           size="small"
           placeholder="Search components..."
           value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
+          onChange={handleSearchChange}
           InputProps={{
             startAdornment: (
               <InputAdornment position="start">
@@ -93,7 +110,7 @@ const ComponentsPanel: React.FC<ComponentsPanelProps> = ({ onToggle }) => {
               <InputAdornment position="end">
                 <IconButton
                   size="small"
-                  onClick={() => setSearchTerm('')}
+                  onClick={handleClearSearch}
                   edge="end"
                 >
                   <ClearIcon fontSize="small" />
@@ -108,7 +125,7 @@ const ComponentsPanel: React.FC<ComponentsPanelProps> = ({ onToggle }) => {
       <Box sx={{ borderBottom: '1px solid', borderColor: 'divider', overflowX: 'auto', bgcolor: 'background.paper' }}>
         <Tabs
           value={selectedCategory}
-          onChange={(_, newValue) => setSelectedCategory(newValue)}
+          onChange={handleCategoryChange}
           variant="scrollable"
           scrollButtons="auto"
           sx={{ 

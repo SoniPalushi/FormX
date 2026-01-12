@@ -18,6 +18,7 @@ import FormDateTime from './FormDateTime';
 import FormImage from './FormImage';
 import FormUpload from './FormUpload';
 import FormContainer from './FormContainer';
+import FormGrid from './FormGrid';
 import FormForm from './FormForm';
 import FormHeader from './FormHeader';
 import FormFooter from './FormFooter';
@@ -94,6 +95,8 @@ const FormComponentRenderer: React.FC<FormComponentRendererProps> = ({ component
       return <FormUpload component={component} />;
     case 'Container':
       return <FormContainer component={component} />;
+    case 'Grid':
+      return <FormGrid component={component} />;
     case 'Form':
       return <FormForm component={component} />;
     case 'Header':

@@ -6,35 +6,33 @@ import {
   FormControlLabel,
   Checkbox as MuiCheckbox,
   Box,
+  FormHelperText,
 } from '@mui/material';
 import type { ComponentDefinition } from '../../stores/types';
 import { useFormBuilderStore } from '../../stores/formBuilderStore';
 import { useFormComponent } from '../../hooks/useFormComponent';
+import { useComponentProperties } from '../../hooks/useComponentProperties';
 
 interface FormCheckBoxGroupProps {
   component: ComponentDefinition;
 }
 
 const FormCheckBoxGroup: React.FC<FormCheckBoxGroupProps> = ({ component }) => {
-  const { selectComponent, selectedComponentId, formMode, components, findComponent } = useFormBuilderStore();
+  const { selectComponent, selectedComponentId, formMode } = useFormBuilderStore();
   const isSelected = selectedComponentId === component.id;
   
-  // Get latest component from store to ensure real-time updates
-  const latestComponent = React.useMemo(() => {
-    return findComponent(component.id) || component;
-  }, [component.id, components, findComponent]);
+  // Get dynamic properties using reusable hook
+  const { latestComponent, className, getSxStyles } = useComponentProperties({ component, formMode });
   
   const {
     computedLabel,
     computedValue,
+    computedHelperText,
     validationError,
     isValid,
     boundValue,
-    setBoundValue,
     responsiveSx,
-    responsiveCss,
     wrapperResponsiveSx,
-    wrapperResponsiveCss,
     shouldRender,
     handleChange,
     handleClick,
@@ -47,11 +45,9 @@ const FormCheckBoxGroup: React.FC<FormCheckBoxGroupProps> = ({ component }) => {
   const row = latestComponent.props?.row || false;
   const color = latestComponent.props?.color || 'primary';
   const size = latestComponent.props?.size || 'medium';
-  const margin = latestComponent.props?.margin;
-  const padding = latestComponent.props?.padding;
-  const classes = latestComponent.props?.classes || latestComponent.props?.className || [];
   
   const displayValue = formMode ? (boundValue || []) : (computedValue || latestComponent.props?.value || []);
+  const displayHelperText = validationError || computedHelperText || '';
   const hasError = !!validationError || !isValid;
 
   if (!shouldRender) return null;
@@ -84,20 +80,22 @@ const FormCheckBoxGroup: React.FC<FormCheckBoxGroupProps> = ({ component }) => {
         borderRadius: 1,
         p: formMode ? 0 : 0.5,
         cursor: formMode ? 'default' : 'pointer',
-        margin: margin ? `${margin.top || 0}px ${margin.right || 0}px ${margin.bottom || 0}px ${margin.left || 0}px` : undefined,
-        padding: padding ? `${padding.top || 0}px ${padding.right || 0}px ${padding.bottom || 0}px ${padding.left || 0}px` : undefined,
-        ...wrapperResponsiveSx,
+        ...getSxStyles({
+          includeMinDimensions: !formMode,
+          defaultMinWidth: '200px',
+          defaultMinHeight: '60px',
+          additionalSx: wrapperResponsiveSx,
+        }),
       }}
-      className={Array.isArray(classes) ? classes.join(' ') : classes}
-      style={wrapperResponsiveCss ? { ...htmlAttributes, style: wrapperResponsiveCss } : htmlAttributes}
+      className={`${formMode ? '' : 'form-builder-checkbox-group'} ${className}`.trim()}
+      style={htmlAttributes}
     >
       <FormControl
         component="fieldset"
         error={hasError}
         required={required}
-        disabled={disabled}
+        disabled={!formMode || disabled}
         sx={responsiveSx}
-        style={responsiveCss ? { style: responsiveCss } : undefined}
       >
         {computedLabel && <FormLabel component="legend">{computedLabel}</FormLabel>}
         <FormGroup row={row}>
@@ -124,7 +122,6 @@ const FormCheckBoxGroup: React.FC<FormCheckBoxGroupProps> = ({ component }) => {
                         e.stopPropagation();
                       }
                     }}
-                    {...htmlAttributes}
                   />
                 }
                 label={optionLabel}
@@ -137,10 +134,8 @@ const FormCheckBoxGroup: React.FC<FormCheckBoxGroupProps> = ({ component }) => {
             );
           })}
         </FormGroup>
-        {validationError && (
-          <Box component="span" sx={{ fontSize: '0.75rem', mt: 0.5, color: 'error.main' }}>
-            {validationError}
-          </Box>
+        {displayHelperText && (
+          <FormHelperText>{displayHelperText}</FormHelperText>
         )}
       </FormControl>
     </Box>
@@ -148,4 +143,3 @@ const FormCheckBoxGroup: React.FC<FormCheckBoxGroupProps> = ({ component }) => {
 };
 
 export default FormCheckBoxGroup;
-

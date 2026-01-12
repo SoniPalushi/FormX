@@ -59,15 +59,15 @@ interface UseFormComponentReturn {
 }
 
 export function useFormComponent({ component, formMode = false }: UseFormComponentOptions): UseFormComponentReturn {
-  const { findComponent } = useFormBuilderStore();
+  const { findComponent, components } = useFormBuilderStore();
   // Subscribe to data changes for reactive updates
   const data = useFormDataStore((state) => state.data);
   const { setData, getData, evaluateProperty } = useFormDataStore();
   
-  // Get latest component
+  // Get latest component - subscribe to components array for real-time updates
   const latestComponent = useMemo(() => {
     return findComponent(component.id) || component;
-  }, [component.id, findComponent]);
+  }, [component.id, components, findComponent]);
   
   // Data binding
   const dataKey = latestComponent.props?.dataKey as string | undefined;

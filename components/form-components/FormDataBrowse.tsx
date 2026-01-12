@@ -26,7 +26,7 @@ interface FormDataBrowseProps {
 }
 
 const FormDataBrowse: React.FC<FormDataBrowseProps> = ({ component }) => {
-  const { selectComponent, selectedComponentId, formMode, findComponent } = useFormBuilderStore();
+  const { selectComponent, selectedComponentId, formMode, findComponent, components } = useFormBuilderStore();
   const { data, getAllData, getData } = useFormDataStore();
   const { getDataviewData } = useBuilderDataStore();
   const isSelected = selectedComponentId === component.id;
@@ -45,10 +45,10 @@ const FormDataBrowse: React.FC<FormDataBrowseProps> = ({ component }) => {
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [searchTerm, setSearchTerm] = useState('');
   
-  // Get latest component
+  // Get latest component - subscribe to components array for real-time updates
   const latestComponent = useMemo(() => {
     return findComponent(component.id) || component;
-  }, [component.id, findComponent]);
+  }, [component.id, components, findComponent]);
 
   // Support multiple data source types: data, rows, dataSource
   const dataSource = latestComponent.props?.dataSource || 

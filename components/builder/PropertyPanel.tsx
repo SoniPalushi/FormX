@@ -4,12 +4,13 @@ import {
   Typography,
   IconButton,
   Divider,
-  Paper,
 } from '@mui/material';
 import { Menu as MenuIcon } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import { useFormBuilderStore } from '../../stores/formBuilderStore';
 import PropertyEditor from './PropertyEditor';
+import ContainerChildrenList from './ContainerChildrenList';
+import AllComponentsList from './AllComponentsList';
 
 interface PropertyPanelProps {
   onToggle: () => void;
@@ -65,52 +66,30 @@ const PropertyPanel: React.FC<PropertyPanelProps> = ({ onToggle }) => {
 
       <Divider />
 
-      {/* Property Editor */}
-      <Box sx={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
+      {/* Property Editor - Use GPU-accelerated scrolling for better performance */}
+      <Box 
+        sx={{ 
+          flex: 1, 
+          overflow: 'auto', 
+          display: 'flex', 
+          flexDirection: 'column',
+          // Enable GPU-accelerated scrolling
+          WebkitOverflowScrolling: 'touch',
+          // Prevent scroll anchoring issues
+          overscrollBehavior: 'contain',
+        }}
+      >
         {selectedComponent ? (
-          <Box
-            sx={{
-              animation: 'fadeIn 0.3s ease-in',
-              '@keyframes fadeIn': {
-                from: {
-                  opacity: 0,
-                  transform: 'translateY(-10px)',
-                },
-                to: {
-                  opacity: 1,
-                  transform: 'translateY(0)',
-                },
-              },
-            }}
-          >
+          <Box sx={{ minHeight: 0 }}>
+            {/* Container Children List - shows child elements for easy selection */}
+            <Box sx={{ p: 1.5, pb: 0 }}>
+              <ContainerChildrenList component={selectedComponent} />
+            </Box>
+            
             <PropertyEditor component={selectedComponent} />
           </Box>
         ) : (
-          <Box 
-            sx={{ 
-              p: 2, 
-              textAlign: 'center', 
-              color: 'text.secondary',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              height: '100%',
-            }}
-          >
-            <Typography 
-              variant="body2" 
-              sx={{ 
-                fontSize: '0.8125rem',
-                opacity: 0.6,
-                transition: 'opacity 0.3s ease',
-                '&:hover': {
-                  opacity: 1,
-                },
-              }}
-            >
-              Select a component to edit its properties
-            </Typography>
-          </Box>
+          <AllComponentsList />
         )}
       </Box>
     </Box>
