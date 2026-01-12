@@ -29,7 +29,9 @@ const FormTextArea: React.FC<FormTextAreaProps> = ({ component }) => {
     responsiveCss,
     wrapperResponsiveSx,
     wrapperResponsiveCss,
-    shouldRender,
+    computedVisible,
+    computedDisabled,
+    computedRequired,
     handleChange,
     handleClick,
     handleFocus,
@@ -40,8 +42,8 @@ const FormTextArea: React.FC<FormTextAreaProps> = ({ component }) => {
   const rows = latestComponent.props?.rows || 4;
   const variant = latestComponent.props?.variant || 'outlined';
   const fullWidth = latestComponent.props?.fullWidth !== false;
-  const required = latestComponent.props?.required || false;
-  const disabled = latestComponent.props?.disabled || false;
+  const required = computedRequired !== undefined ? computedRequired : (latestComponent.props?.required || false);
+  const disabled = computedDisabled !== undefined ? computedDisabled : (latestComponent.props?.disabled || false);
   const maxLength = latestComponent.props?.maxLength;
   const size = latestComponent.props?.size || 'medium';
   const width = latestComponent.props?.width;
@@ -51,7 +53,7 @@ const FormTextArea: React.FC<FormTextAreaProps> = ({ component }) => {
   const displayHelperText = validationError || computedHelperText || '';
   const hasError = !!validationError || !isValid;
 
-  if (!shouldRender) return null;
+  if (!computedVisible) return null;
 
   return (
     <Box

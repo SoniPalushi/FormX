@@ -34,7 +34,9 @@ const FormRadioGroup: React.FC<FormRadioGroupProps> = ({ component }) => {
     boundValue,
     responsiveSx,
     wrapperResponsiveSx,
-    shouldRender,
+    computedVisible,
+    computedDisabled,
+    computedRequired,
     handleChange,
     handleClick,
     handleFocus,
@@ -44,8 +46,8 @@ const FormRadioGroup: React.FC<FormRadioGroupProps> = ({ component }) => {
   
   const options = latestComponent.props?.options || [];
   const row = latestComponent.props?.row || false;
-  const disabled = latestComponent.props?.disabled || false;
-  const required = latestComponent.props?.required || false;
+  const disabled = computedDisabled !== undefined ? computedDisabled : (latestComponent.props?.disabled || false);
+  const required = computedRequired !== undefined ? computedRequired : (latestComponent.props?.required || false);
   const size = latestComponent.props?.size || 'medium';
   const color = latestComponent.props?.color || 'primary';
   const width = latestComponent.props?.width;
@@ -55,7 +57,7 @@ const FormRadioGroup: React.FC<FormRadioGroupProps> = ({ component }) => {
   const hasError = !!validationError || !isValid;
 
   // Don't render if conditional rendering says no
-  if (!shouldRender) {
+  if (!computedVisible) {
     return null;
   }
 

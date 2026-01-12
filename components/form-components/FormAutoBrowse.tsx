@@ -31,7 +31,9 @@ const FormAutoBrowse: React.FC<FormAutoBrowseProps> = ({ component }) => {
     responsiveCss,
     wrapperResponsiveSx,
     wrapperResponsiveCss,
-    shouldRender,
+    computedVisible,
+    computedDisabled,
+    computedRequired,
     handleChange,
     handleClick,
     handleFocus,
@@ -41,8 +43,8 @@ const FormAutoBrowse: React.FC<FormAutoBrowseProps> = ({ component }) => {
   
   const variant = latestComponent.props?.variant || 'outlined';
   const fullWidth = latestComponent.props?.fullWidth !== false;
-  const required = latestComponent.props?.required || false;
-  const disabled = latestComponent.props?.disabled || false;
+  const required = computedRequired !== undefined ? computedRequired : (latestComponent.props?.required || false);
+  const disabled = computedDisabled !== undefined ? computedDisabled : (latestComponent.props?.disabled || false);
   const size = latestComponent.props?.size || 'medium';
   const margin = latestComponent.props?.margin;
   const padding = latestComponent.props?.padding;
@@ -55,7 +57,7 @@ const FormAutoBrowse: React.FC<FormAutoBrowseProps> = ({ component }) => {
   const displayHelperText = validationError || computedHelperText || '';
   const hasError = !!validationError || !isValid;
 
-  if (!shouldRender) return null;
+  if (!computedVisible) return null;
 
   return (
     <Box
@@ -130,7 +132,6 @@ const FormAutoBrowse: React.FC<FormAutoBrowseProps> = ({ component }) => {
           ...(width ? { width } : undefined),
           ...responsiveSx,
         }}
-        style={responsiveCss ? { style: responsiveCss } : undefined}
         {...htmlAttributes}
       />
     </Box>

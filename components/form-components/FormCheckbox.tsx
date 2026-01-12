@@ -25,14 +25,16 @@ const FormCheckbox: React.FC<FormCheckboxProps> = ({ component }) => {
     boundValue,
     responsiveSx,
     wrapperResponsiveSx,
-    shouldRender,
+    computedVisible,
+    computedDisabled,
+    computedRequired,
     handleChange,
     handleClick,
     htmlAttributes,
   } = useFormComponent({ component: latestComponent, formMode });
   
-  const disabled = latestComponent.props?.disabled || false;
-  const required = latestComponent.props?.required || false;
+  const disabled = computedDisabled !== undefined ? computedDisabled : (latestComponent.props?.disabled || false);
+  const required = computedRequired !== undefined ? computedRequired : (latestComponent.props?.required || false);
   const indeterminate = latestComponent.props?.indeterminate || false;
   const color = latestComponent.props?.color || 'primary';
   const size = latestComponent.props?.size || 'medium';
@@ -41,7 +43,7 @@ const FormCheckbox: React.FC<FormCheckboxProps> = ({ component }) => {
   const hasError = !!validationError || !isValid;
   const displayHelperText = validationError || computedHelperText || '';
 
-  if (!shouldRender) return null;
+  if (!computedVisible) return null;
 
   return (
     <Box

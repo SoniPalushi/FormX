@@ -29,7 +29,9 @@ const FormAmount: React.FC<FormAmountProps> = ({ component }) => {
     responsiveCss,
     wrapperResponsiveSx,
     wrapperResponsiveCss,
-    shouldRender,
+    computedVisible,
+    computedDisabled,
+    computedRequired,
     handleChange,
     handleClick,
     handleFocus,
@@ -40,8 +42,8 @@ const FormAmount: React.FC<FormAmountProps> = ({ component }) => {
   const currency = latestComponent.props?.currency || latestComponent.props?.currencySymbol || '$';
   const variant = latestComponent.props?.variant || 'outlined';
   const fullWidth = latestComponent.props?.fullWidth !== false;
-  const required = latestComponent.props?.required || false;
-  const disabled = latestComponent.props?.disabled || false;
+  const required = computedRequired !== undefined ? computedRequired : (latestComponent.props?.required || false);
+  const disabled = computedDisabled !== undefined ? computedDisabled : (latestComponent.props?.disabled || false);
   const decimalPlaces = latestComponent.props?.decimalPlaces ?? 2;
   const size = latestComponent.props?.size || 'medium';
   const width = latestComponent.props?.width;
@@ -51,7 +53,7 @@ const FormAmount: React.FC<FormAmountProps> = ({ component }) => {
   const displayHelperText = validationError || computedHelperText || '';
   const hasError = !!validationError || !isValid;
 
-  if (!shouldRender) return null;
+  if (!computedVisible) return null;
 
   return (
     <Box
