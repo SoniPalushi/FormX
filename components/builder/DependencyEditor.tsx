@@ -194,12 +194,8 @@ const DependencyConditionEditor: React.FC<{
         >
           <ToggleButton value="none">None</ToggleButton>
           <ToggleButton value="fieldValue">Field Value</ToggleButton>
-          {advancedMode && (
-            <>
-              <ToggleButton value="expression">Expression</ToggleButton>
-              <ToggleButton value="function">Function</ToggleButton>
-            </>
-          )}
+          {advancedMode && <ToggleButton value="expression">Expression</ToggleButton>}
+          {advancedMode && <ToggleButton value="function">Function</ToggleButton>}
         </ToggleButtonGroup>
       </Box>
 
@@ -290,7 +286,7 @@ const DependencyConditionEditor: React.FC<{
             multiline
             rows={3}
             placeholder="data.state !== null && data.state !== ''"
-            helperText="Access form data via 'data' object (e.g., data.fieldName)"
+            helperText="Access form data via 'data' object using dataKey (e.g., data.state, data.city)"
           />
           {previewResult !== null && (
             <Alert severity={previewResult ? 'success' : 'warning'} sx={{ mt: 1 }}>
@@ -388,12 +384,8 @@ const ComputedPropertyEditor: React.FC<{
         >
           <ToggleButton value="none">None</ToggleButton>
           <ToggleButton value="template">Template</ToggleButton>
-          {advancedMode && (
-            <>
-              <ToggleButton value="expression">Expression</ToggleButton>
-              <ToggleButton value="function">Function</ToggleButton>
-            </>
-          )}
+          {advancedMode && <ToggleButton value="expression">Expression</ToggleButton>}
+          {advancedMode && <ToggleButton value="function">Function</ToggleButton>}
         </ToggleButtonGroup>
       </Box>
 
@@ -410,8 +402,8 @@ const ComputedPropertyEditor: React.FC<{
           onChange={(e) => onChange({ type: 'template', template: e.target.value })}
           size="small"
           fullWidth
-          placeholder='{data.typeName} *'
-          helperText="Use {data.fieldName} for placeholders (e.g., '{data.firstName} {data.lastName}')"
+          placeholder='{data.dataKey} *'
+          helperText="Use {data.dataKey} for placeholders, where dataKey is the field's dataKey (e.g., '{data.firstName} {data.lastName}')"
         />
       )}
 
@@ -424,8 +416,8 @@ const ComputedPropertyEditor: React.FC<{
           fullWidth
           multiline
           rows={3}
-          placeholder="data.firstName + ' ' + data.lastName"
-          helperText="Access form data via 'data' object"
+            placeholder="data.firstName + ' ' + data.lastName"
+            helperText="Access form data via 'data' object using dataKey (e.g., data.firstName, data.lastName)"
         />
       )}
 
@@ -438,8 +430,8 @@ const ComputedPropertyEditor: React.FC<{
           fullWidth
           multiline
           rows={4}
-          placeholder="return data.firstName + ' ' + data.lastName;"
-          helperText="JavaScript function. Access form data via 'data' object."
+            placeholder="return data.firstName + ' ' + data.lastName;"
+            helperText="JavaScript function. Access form data via 'data' object using dataKey (e.g., data.firstName, data.lastName)"
         />
       )}
     </Box>
@@ -455,6 +447,7 @@ const FilterDependencyEditor: React.FC<{
   componentId: string;
 }> = ({ filterBy, onChange, componentId }) => {
   const { components } = useFormBuilderStore();
+  const advancedMode = useModeStore((state) => state.advancedMode);
   
   // Get all available dataKeys
   const availableFields = useMemo(() => {
@@ -504,15 +497,27 @@ const FilterDependencyEditor: React.FC<{
           size="small"
           startIcon={<AddIcon />}
           onClick={handleAddFilter}
-          disabled={availableFields.length === 0}
         >
           Add Filter
         </Button>
       </Box>
 
       {filters.length === 0 && (
-        <Alert severity="info" sx={{ fontSize: '0.75rem' }}>
+        <Alert severity="info" sx={{ fontSize: '0.75rem', mb: 1.5 }}>
           No filters configured. Add a filter to enable cascading dropdowns.
+          {availableFields.length === 0 && (
+            <Box component="div" sx={{ mt: 0.5 }}>
+              <Typography variant="caption" component="div">
+                Note: No other fields with dataKeys found. You can still add a filter and manually enter the source field name.
+              </Typography>
+            </Box>
+          )}
+        </Alert>
+      )}
+
+      {availableFields.length > 0 && (
+        <Alert severity="success" sx={{ fontSize: '0.75rem', mb: 1.5 }}>
+          Available source fields: {availableFields.join(', ')}
         </Alert>
       )}
 
@@ -541,23 +546,32 @@ const FilterDependencyEditor: React.FC<{
           </Typography>
 
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-            <FormControl fullWidth size="small">
-              <InputLabel>Source Field (dataKey)</InputLabel>
-              <Select
-                value={filter.sourceField || ''}
+            {availableFields.length > 0 ? (
+              <FormControl fullWidth size="small">
+                <InputLabel>Source Field (dataKey)</InputLabel>
+                <Select
+                  value={filter.sourceField || ''}
+                  label="Source Field (dataKey)"
+                  onChange={(e) => handleUpdateFilter(index, { sourceField: e.target.value })}
+                >
+                  {availableFields.map((field) => (
+                    <MenuItem key={field} value={field}>
+                      {field}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            ) : (
+              <TextField
                 label="Source Field (dataKey)"
+                value={filter.sourceField || ''}
                 onChange={(e) => handleUpdateFilter(index, { sourceField: e.target.value })}
-              >
-                {availableFields.map((field) => (
-                  <MenuItem key={field} value={field}>
-                    {field}
-                  </MenuItem>
-                ))}
-                {availableFields.length === 0 && (
-                  <MenuItem disabled>No fields available</MenuItem>
-                )}
-              </Select>
-            </FormControl>
+                size="small"
+                fullWidth
+                placeholder="e.g., state, country"
+                helperText="Enter the dataKey of the field to watch for changes"
+              />
+            )}
 
             <TextField
               label="Target Parameter Name"

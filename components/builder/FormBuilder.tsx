@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { Box } from '@mui/material';
 import BuilderHeader from './BuilderHeader';
 import BuilderContent from './BuilderContent';
+import DependencyEditorModal from './DependencyEditorModal';
 import { useFormBuilderStore } from '../../stores/formBuilderStore';
 import { useHistoryStore } from '../../stores/historyStore';
 
@@ -75,6 +76,7 @@ const FormBuilder: React.FC = () => {
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
       <BuilderHeader />
       <BuilderContent />
+      <DependencyEditorModal />
     </Box>
   );
 };

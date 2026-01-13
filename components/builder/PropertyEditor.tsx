@@ -39,10 +39,79 @@ interface PropertyEditorProps {
   component: ComponentDefinition;
 }
 
+// Helper component for options input with local state
+const OptionsInput: React.FC<{
+  options: any[];
+  onChange: (options: any[]) => void;
+  helperText?: string;
+  format?: 'simple' | 'keyvalue';
+}> = ({ options, onChange, helperText, format = 'simple' }) => {
+  const [optionsInput, setOptionsInput] = React.useState<string>('');
+  const [isFocused, setIsFocused] = React.useState(false);
+  const optionsRef = React.useRef<string>('');
+  
+  // Initialize from props only when not focused and options actually changed
+  React.useEffect(() => {
+    const currentOptionsString = options.map((opt: any) => 
+      typeof opt === 'string' ? opt : `${opt.value || opt.key}:${opt.label || opt.value || opt.key}`
+    ).join('; ');
+    
+    // Only update if options changed externally (not from our own onBlur)
+    if (!isFocused && optionsRef.current !== currentOptionsString) {
+      setOptionsInput(currentOptionsString);
+      optionsRef.current = currentOptionsString;
+    }
+  }, [options, isFocused]);
+  
+  const parseOptions = (input: string) => {
+    const items = input.split(';').map(s => s.trim()).filter((o) => o);
+    if (format === 'keyvalue') {
+      return items.map((item) => {
+        if (item.includes(':')) {
+          const [value, label] = item.split(':').map(s => s.trim());
+          return { value, label: label || value };
+        }
+        return item;
+      });
+    }
+    return items;
+  };
+  
+  return (
+    <TextField
+      value={optionsInput}
+      onChange={(e) => {
+        setOptionsInput(e.target.value);
+      }}
+      onFocus={() => {
+        setIsFocused(true);
+      }}
+      onBlur={(e) => {
+        setIsFocused(false);
+        const parsedOptions = parseOptions(e.target.value);
+        const optionsString = parsedOptions.map((opt: any) => 
+          typeof opt === 'string' ? opt : `${opt.value || opt.key}:${opt.label || opt.value || opt.key}`
+        ).join('; ');
+        optionsRef.current = optionsString;
+        onChange(parsedOptions);
+      }}
+      size="small"
+      fullWidth
+      sx={{ mt: 0.5 }}
+      helperText={helperText}
+    />
+  );
+};
+
 const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
   const { updateComponent, deleteComponent, duplicateComponent, components, findComponent } = useFormBuilderStore();
   const { addToHistory } = useHistoryStore();
   const updatingRef = useRef(false);
+  
+  // Local state for text field values - prevents re-rendering on every keystroke
+  // Only updates store on blur/click away
+  const [localFieldValues, setLocalFieldValues] = useState<Record<string, string>>({});
+  const focusedFieldRef = useRef<string | null>(null);
   
   // Advanced Mode from global store
   const advancedMode = useModeStore((state) => state.advancedMode);
@@ -64,10 +133,8 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
         // Update state with loaded dataviews for reactivity
         const loadedData = dataviewManager.list.getAllLoadedData();
         setDataviewsList(loadedData);
-        console.log('Loaded dataviews:', loadedData.length, loadedData);
       } catch (error) {
         // Log error for debugging
-        console.error('Failed to load dataviews list:', error);
         setDataviewsList([]);
       } finally {
         setDataviewsLoading(false);
@@ -177,6 +244,125 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
     duplicateComponent(componentWithProps.id);
   };
 
+  // Helper function to create TextField with local state - updates store only on blur
+  const createTextFieldWithLocalState = (
+    propKey: string,
+    label: string,
+    value: string | number | undefined,
+    onBlurHandler: (value: any) => void,
+    options: {
+      type?: string;
+      multiline?: boolean;
+      rows?: number;
+      helperText?: string;
+      sx?: any;
+      placeholder?: string;
+      disabled?: boolean;
+    } = {}
+  ) => {
+    const fieldKey = `${component.id}.${propKey}`;
+    const localValue = focusedFieldRef.current === fieldKey 
+      ? localFieldValues[fieldKey] ?? String(value ?? '')
+      : String(value ?? '');
+    
+    return (
+      <TextField
+        label={label}
+        value={localValue}
+        type={options.type}
+        multiline={options.multiline}
+        rows={options.rows}
+        helperText={options.helperText}
+        placeholder={options.placeholder}
+        disabled={options.disabled}
+        onChange={(e) => {
+          setLocalFieldValues(prev => ({ ...prev, [fieldKey]: e.target.value }));
+        }}
+        onFocus={() => {
+          focusedFieldRef.current = fieldKey;
+          setLocalFieldValues(prev => ({ ...prev, [fieldKey]: String(value ?? '') }));
+        }}
+        onBlur={(e) => {
+          focusedFieldRef.current = null;
+          const finalValue = options.type === 'number' 
+            ? (e.target.value === '' ? undefined : Number(e.target.value))
+            : e.target.value;
+          onBlurHandler(finalValue);
+        }}
+        size="small"
+        fullWidth
+        sx={{ mt: 0.75, ...options.sx }}
+      />
+    );
+  };
+
+  // Helper function for multiline TextFields that parse JSON on blur
+  const createMultilineTextFieldWithLocalState = (
+    propKey: string,
+    label: string,
+    value: any,
+    onBlurHandler: (value: any) => void,
+    options: {
+      rows?: number;
+      helperText?: string;
+      placeholder?: string;
+      parseJson?: boolean;
+      parseArray?: boolean;
+      sx?: any;
+      disabled?: boolean;
+    } = {}
+  ) => {
+    const fieldKey = `${component.id}.${propKey}`;
+    const stringValue = options.parseJson 
+      ? JSON.stringify(value || (options.parseArray ? [] : {}), null, 2)
+      : Array.isArray(value)
+      ? value.join('\n')
+      : String(value ?? '');
+    
+    const localValue = focusedFieldRef.current === fieldKey 
+      ? localFieldValues[fieldKey] ?? stringValue
+      : stringValue;
+    
+    return (
+      <TextField
+        label={label}
+        value={localValue}
+        multiline
+        rows={options.rows || 4}
+        helperText={options.helperText}
+        placeholder={options.placeholder}
+        disabled={options.disabled}
+        onChange={(e) => {
+          setLocalFieldValues(prev => ({ ...prev, [fieldKey]: e.target.value }));
+        }}
+        onFocus={() => {
+          focusedFieldRef.current = fieldKey;
+          setLocalFieldValues(prev => ({ ...prev, [fieldKey]: stringValue }));
+        }}
+        onBlur={(e) => {
+          focusedFieldRef.current = null;
+          let finalValue: any;
+          if (options.parseJson) {
+            try {
+              finalValue = JSON.parse(e.target.value);
+            } catch {
+              // If JSON is invalid, try to save as string or return empty
+              finalValue = e.target.value || (options.parseArray ? [] : {});
+            }
+          } else if (options.parseArray) {
+            finalValue = e.target.value.split('\n').filter((s) => s.trim());
+          } else {
+            finalValue = e.target.value;
+          }
+          onBlurHandler(finalValue);
+        }}
+        size="small"
+        fullWidth
+        sx={{ mt: 0.5, ...options.sx }}
+      />
+    );
+  };
+
   const renderPropertyField = (key: string, value: any) => {
     const valueType = typeof value;
 
@@ -197,13 +383,29 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
     }
 
     if (valueType === 'number') {
+      const fieldKey = `${component.id}.${key}`;
+      const localValue = focusedFieldRef.current === fieldKey 
+        ? localFieldValues[fieldKey] ?? String(value ?? '')
+        : String(value ?? '');
+      
       return (
         <TextField
           key={key}
           label={key}
           type="number"
-          value={value}
-          onChange={(e) => handlePropertyChange(key, Number(e.target.value))}
+          value={localValue}
+          onChange={(e) => {
+            setLocalFieldValues(prev => ({ ...prev, [fieldKey]: e.target.value }));
+          }}
+          // onFocus={() => {
+          //   focusedFieldRef.current = fieldKey;
+          //   setLocalFieldValues(prev => ({ ...prev, [fieldKey]: String(value ?? '') }));
+          // }}
+          onBlur={(e) => {
+            focusedFieldRef.current = null;
+            const numValue = e.target.value === '' ? undefined : Number(e.target.value);
+            handlePropertyChange(key, numValue);
+          }}
           size="small"
           fullWidth
           sx={{ mt: 1 }}
@@ -255,12 +457,27 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
     }
 
     // String or default
+    const fieldKey = `${component.id}.${key}`;
+    const localValue = focusedFieldRef.current === fieldKey 
+      ? localFieldValues[fieldKey] ?? String(value ?? '')
+      : String(value ?? '');
+    
     return (
       <TextField
         key={key}
         label={key}
-        value={String(value)}
-        onChange={(e) => handlePropertyChange(key, e.target.value)}
+        value={localValue}
+        onChange={(e) => {
+          setLocalFieldValues(prev => ({ ...prev, [fieldKey]: e.target.value }));
+        }}
+        onFocus={() => {
+          focusedFieldRef.current = fieldKey;
+          setLocalFieldValues(prev => ({ ...prev, [fieldKey]: String(value ?? '') }));
+        }}
+        onBlur={(e) => {
+          focusedFieldRef.current = null;
+          handlePropertyChange(key, e.target.value);
+        }}
         size="small"
         fullWidth
         sx={{ mt: 1 }}
@@ -354,52 +571,17 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
       case 'TextInput':
         return (
           <>
-            <TextField
-              label="Label"
-              value={componentWithProps.props?.label || ''}
-              onChange={(e) => handlePropertyChange('label', e.target.value)}
-              size="small"
-              fullWidth
-              sx={{ mt: 0.75 }}
-            />
-            <TextField
-              label="Placeholder"
-              value={componentWithProps.props?.placeholder || ''}
-              onChange={(e) => handlePropertyChange('placeholder', e.target.value)}
-              size="small"
-              fullWidth
-              sx={{ mt: 0.75 }}
-            />
-            <TextField
-              label="Default Value"
-              value={componentWithProps.props?.value || componentWithProps.props?.defaultValue || ''}
-              onChange={(e) => {
-                handlePropertyChange('value', e.target.value);
-                handlePropertyChange('defaultValue', e.target.value);
-              }}
-              size="small"
-              fullWidth
-              sx={{ mt: 0.75 }}
-            />
-            <TextField
-              label="Max Length"
-              type="number"
-              value={componentWithProps.props?.maxLength || ''}
-              onChange={(e) => handlePropertyChange('maxLength', e.target.value ? Number(e.target.value) : undefined)}
-              size="small"
-              fullWidth
-              sx={{ mt: 0.75 }}
-            />
+            {createTextFieldWithLocalState('label', 'Label', componentWithProps.props?.label, (val) => handlePropertyChange('label', val))}
+            {createTextFieldWithLocalState('placeholder', 'Placeholder', componentWithProps.props?.placeholder, (val) => handlePropertyChange('placeholder', val))}
+            {createTextFieldWithLocalState('defaultValue', 'Default Value', componentWithProps.props?.value || componentWithProps.props?.defaultValue, (val) => {
+              handlePropertyChange('value', val);
+              handlePropertyChange('defaultValue', val);
+            })}
+            {createTextFieldWithLocalState('maxLength', 'Max Length', componentWithProps.props?.maxLength, (val) => handlePropertyChange('maxLength', val), { type: 'number' })}
             {isFeatureAvailable('pattern', COMPONENT_PROPERTIES_CLASSIFICATION, advancedMode) && (
-              <TextField
-                label="Pattern (RegEx)"
-                value={componentWithProps.props?.pattern || ''}
-                onChange={(e) => handlePropertyChange('pattern', e.target.value)}
-                size="small"
-                fullWidth
-                sx={{ mt: 0.75 }}
-                helperText="HTML5 pattern attribute for validation"
-              />
+              createTextFieldWithLocalState('pattern', 'Pattern (RegEx)', componentWithProps.props?.pattern, (val) => handlePropertyChange('pattern', val), {
+                helperText: 'HTML5 pattern attribute for validation'
+              })
             )}
             <FormControl fullWidth sx={{ mt: 1 }}>
               <InputLabel>Type</InputLabel>
@@ -459,53 +641,14 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
       case 'TextArea':
         return (
           <>
-            <TextField
-              label="Label"
-              value={componentWithProps.props?.label || ''}
-              onChange={(e) => handlePropertyChange('label', e.target.value)}
-              size="small"
-              fullWidth
-              sx={{ mt: 0.75 }}
-            />
-            <TextField
-              label="Placeholder"
-              value={componentWithProps.props?.placeholder || ''}
-              onChange={(e) => handlePropertyChange('placeholder', e.target.value)}
-              size="small"
-              fullWidth
-              sx={{ mt: 0.75 }}
-            />
-            <TextField
-              label="Default Value"
-              value={componentWithProps.props?.value || componentWithProps.props?.defaultValue || ''}
-              onChange={(e) => {
-                handlePropertyChange('value', e.target.value);
-                handlePropertyChange('defaultValue', e.target.value);
-              }}
-              size="small"
-              fullWidth
-              sx={{ mt: 0.75 }}
-              multiline
-              rows={3}
-            />
-            <TextField
-              label="Rows"
-              type="number"
-              value={componentWithProps.props?.rows || 4}
-              onChange={(e) => handlePropertyChange('rows', Number(e.target.value))}
-              size="small"
-              fullWidth
-              sx={{ mt: 0.75 }}
-            />
-            <TextField
-              label="Max Length"
-              type="number"
-              value={componentWithProps.props?.maxLength || ''}
-              onChange={(e) => handlePropertyChange('maxLength', e.target.value ? Number(e.target.value) : undefined)}
-              size="small"
-              fullWidth
-              sx={{ mt: 0.75 }}
-            />
+            {createTextFieldWithLocalState('label', 'Label', componentWithProps.props?.label, (val) => handlePropertyChange('label', val))}
+            {createTextFieldWithLocalState('placeholder', 'Placeholder', componentWithProps.props?.placeholder, (val) => handlePropertyChange('placeholder', val))}
+            {createTextFieldWithLocalState('defaultValue', 'Default Value', componentWithProps.props?.value || componentWithProps.props?.defaultValue, (val) => {
+              handlePropertyChange('value', val);
+              handlePropertyChange('defaultValue', val);
+            }, { multiline: true, rows: 3 })}
+            {createTextFieldWithLocalState('rows', 'Rows', componentWithProps.props?.rows || 4, (val) => handlePropertyChange('rows', val), { type: 'number' })}
+            {createTextFieldWithLocalState('maxLength', 'Max Length', componentWithProps.props?.maxLength, (val) => handlePropertyChange('maxLength', val), { type: 'number' })}
             <FormControl fullWidth sx={{ mt: 1 }}>
               <InputLabel>Variant</InputLabel>
               <Select
@@ -536,14 +679,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
       case 'Button':
         return (
           <>
-            <TextField
-              label="Label"
-              value={componentWithProps.props?.label || componentWithProps.props?.text || ''}
-              onChange={(e) => handlePropertyChange('label', e.target.value)}
-              size="small"
-              fullWidth
-              sx={{ mt: 0.75 }}
-            />
+            {createTextFieldWithLocalState('label', 'Label', componentWithProps.props?.label || componentWithProps.props?.text, (val) => handlePropertyChange('label', val))}
             <FormControl fullWidth sx={{ mt: 1 }}>
               <InputLabel>Variant</InputLabel>
               <Select
@@ -580,16 +716,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
       case 'Heading':
         return (
           <>
-            <TextField
-              label="Text"
-              value={componentWithProps.props?.text || componentWithProps.props?.label || ''}
-              onChange={(e) => handlePropertyChange('text', e.target.value)}
-              size="small"
-              fullWidth
-              sx={{ mt: 0.75 }}
-              multiline
-              rows={2}
-            />
+            {createTextFieldWithLocalState('text', 'Text', componentWithProps.props?.text || componentWithProps.props?.label, (val) => handlePropertyChange('text', val), { multiline: true, rows: 2 })}
             {componentWithProps.type === 'Heading' && (
               <FormControl fullWidth sx={{ mt: 1 }}>
                 <InputLabel>Variant</InputLabel>
@@ -614,22 +741,8 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
       case 'Link':
         return (
           <>
-            <TextField
-              label="Text"
-              value={componentWithProps.props?.text || ''}
-              onChange={(e) => handlePropertyChange('text', e.target.value)}
-              size="small"
-              fullWidth
-              sx={{ mt: 0.75 }}
-            />
-            <TextField
-              label="Href"
-              value={componentWithProps.props?.href || ''}
-              onChange={(e) => handlePropertyChange('href', e.target.value)}
-              size="small"
-              fullWidth
-              sx={{ mt: 0.75 }}
-            />
+            {createTextFieldWithLocalState('text', 'Text', componentWithProps.props?.text, (val) => handlePropertyChange('text', val))}
+            {createTextFieldWithLocalState('href', 'Href', componentWithProps.props?.href, (val) => handlePropertyChange('href', val))}
           </>
         );
 
@@ -637,25 +750,11 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
       case 'DropDown':
         return (
           <>
-            <TextField
-              label="Label"
-              value={componentWithProps.props?.label || ''}
-              onChange={(e) => handlePropertyChange('label', e.target.value)}
-              size="small"
-              fullWidth
-              sx={{ mt: 0.75 }}
-            />
-            <TextField
-              label="Default Value"
-              value={componentWithProps.props?.value || componentWithProps.props?.defaultValue || ''}
-              onChange={(e) => {
-                handlePropertyChange('value', e.target.value);
-                handlePropertyChange('defaultValue', e.target.value);
-              }}
-              size="small"
-              fullWidth
-              sx={{ mt: 0.75 }}
-            />
+            {createTextFieldWithLocalState('label', 'Label', componentWithProps.props?.label, (val) => handlePropertyChange('label', val))}
+            {createTextFieldWithLocalState('defaultValue', 'Default Value', componentWithProps.props?.value || componentWithProps.props?.defaultValue, (val) => {
+              handlePropertyChange('value', val);
+              handlePropertyChange('defaultValue', val);
+            })}
             <Box sx={{ mt: 1 }}>
               <Typography variant="caption" sx={{ display: 'block', mb: 0.5, fontWeight: 600 }}>
                 Options Data Source
@@ -906,27 +1005,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
                             </FormControl>
                           </Box>
 
-                          {/* Parsed Fields Display */}
-                          <Box sx={{ mb: 2 }}>
-                            <Typography variant="caption" sx={{ fontWeight: 600, display: 'block', mb: 1 }}>
-                              Available Fields ({dataviewFields.length}):
-                            </Typography>
-                            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                              {dataviewFields.map((field) => {
-                                const isValueField = field === (componentWithProps.props?.valueField || dataviewFields[0]);
-                                const isLabelField = field === (componentWithProps.props?.labelField || (dataviewFields[1] || dataviewFields[0]));
-                                return (
-                                  <Chip
-                                    key={field}
-                                    label={field}
-                                    size="small"
-                                    color={isValueField ? 'primary' : isLabelField ? 'secondary' : 'default'}
-                                    variant={isValueField || isLabelField ? 'filled' : 'outlined'}
-                                  />
-                                );
-                              })}
-                            </Box>
-                          </Box>
+                         
 
                           {/* Preview of Dropdown Options */}
                           {Array.isArray(selectedDataviewResponse) && selectedDataviewResponse.length > 0 && (
@@ -965,37 +1044,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
                             </Box>
                           )}
 
-                          {/* Raw API Response (Collapsible) */}
-                          <Accordion>
-                            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                <CodeIcon />
-                                <Typography variant="caption" sx={{ fontWeight: 600 }}>
-                                  View Raw API Response
-                                </Typography>
-                              </Box>
-                            </AccordionSummary>
-                            <AccordionDetails>
-                              <Box
-                                sx={{
-                                  p: 1,
-                                  bgcolor: 'grey.100',
-                                  borderRadius: 1,
-                                  maxHeight: 300,
-                                  overflow: 'auto',
-                                  fontFamily: 'monospace',
-                                  fontSize: '0.75rem',
-                                }}
-                              >
-                                <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                                  {JSON.stringify(selectedDataviewResponse, null, 2)}
-                                </pre>
-                              </Box>
-                              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
-                                Total Records: {Array.isArray(selectedDataviewResponse) ? selectedDataviewResponse.length : 'N/A'}
-                              </Typography>
-                            </AccordionDetails>
-                          </Accordion>
+                        
                         </Box>
                       )}
                     </Box>
@@ -1005,28 +1054,12 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
                 if (sourceType === 'static') {
                   return (
                     <>
-                      <Typography variant="caption">Options (one per line, or value:label format)</Typography>
-                      <TextField
-                        value={(componentWithProps.props?.options || []).map((opt: any) => 
-                          typeof opt === 'string' ? opt : `${opt.value || opt.key}:${opt.label || opt.value || opt.key}`
-                        ).join('\n')}
-                        onChange={(e) => {
-                          const lines = e.target.value.split('\n').filter((o) => o.trim());
-                          const options = lines.map((line) => {
-                            if (line.includes(':')) {
-                              const [value, label] = line.split(':').map(s => s.trim());
-                              return { value, label: label || value };
-                            }
-                            return line;
-                          });
-                          handlePropertyChange('options', options);
-                        }}
-                        size="small"
-                        fullWidth
-                        multiline
-                        rows={4}
-                        sx={{ mt: 0.5 }}
-                        helperText="Format: option1 or value1:Label 1"
+                      <Typography variant="caption">Options (semicolon-separated, or value:label format)</Typography>
+                      <OptionsInput
+                        options={componentWithProps.props?.options || []}
+                        onChange={(options) => handlePropertyChange('options', options)}
+                        format="keyvalue"
+                        helperText="Format: option1; option2 or value1:Label 1; value2:Label 2"
                       />
                     </>
                   );
@@ -1071,15 +1104,9 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
                   );
                 } else if (sourceType === 'dataKey') {
                   return (
-                    <TextField
-                      label="Data Key"
-                      value={String(componentWithProps.props?.optionsSource || '')}
-                      onChange={(e) => handlePropertyChange('optionsSource', e.target.value)}
-                      size="small"
-                      fullWidth
-                      sx={{ mt: 0.5 }}
-                      helperText="Key in form data store that contains the options array (e.g., 'countries', 'user.roles')"
-                    />
+                    createTextFieldWithLocalState('optionsSource', 'Data Key', componentWithProps.props?.optionsSource, (val) => handlePropertyChange('optionsSource', val), {
+                      helperText: "Key in form data store that contains the options array (e.g., 'countries', 'user.roles')"
+                    })
                   );
                 }
                 return null;
@@ -1126,36 +1153,15 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
       case 'Image':
         return (
           <>
-            <TextField
-              label="Source (URL)"
-              value={componentWithProps.props?.src || ''}
-              onChange={(e) => handlePropertyChange('src', e.target.value)}
-              size="small"
-              fullWidth
-              sx={{ mt: 0.75 }}
-            />
-            <TextField
-              label="Alt Text"
-              value={componentWithProps.props?.alt || ''}
-              onChange={(e) => handlePropertyChange('alt', e.target.value)}
-              size="small"
-              fullWidth
-              sx={{ mt: 0.75 }}
-            />
+            {createTextFieldWithLocalState('src', 'Source (URL)', componentWithProps.props?.src, (val) => handlePropertyChange('src', val))}
+            {createTextFieldWithLocalState('alt', 'Alt Text', componentWithProps.props?.alt, (val) => handlePropertyChange('alt', val))}
           </>
         );
 
       case 'Header':
         return (
           <>
-            <TextField
-              label="Title"
-              value={componentWithProps.props?.title || componentWithProps.props?.text || ''}
-              onChange={(e) => handlePropertyChange('title', e.target.value)}
-              size="small"
-              fullWidth
-              sx={{ mt: 0.75 }}
-            />
+            {createTextFieldWithLocalState('title', 'Title', componentWithProps.props?.title || componentWithProps.props?.text, (val) => handlePropertyChange('title', val))}
             <FormControl fullWidth sx={{ mt: 1 }}>
               <InputLabel>Position</InputLabel>
               <Select
@@ -1189,100 +1195,58 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
       case 'Footer':
         return (
           <>
-            <TextField
-              label="Text"
-              value={componentWithProps.props?.text || componentWithProps.props?.label || ''}
-              onChange={(e) => handlePropertyChange('text', e.target.value)}
-              size="small"
-              fullWidth
-              sx={{ mt: 0.75 }}
-            />
-            <TextField
-              label="Elevation"
-              type="number"
-              value={componentWithProps.props?.elevation || 3}
-              onChange={(e) => handlePropertyChange('elevation', Number(e.target.value))}
-              size="small"
-              fullWidth
-              sx={{ mt: 0.75 }}
-            />
+            {createTextFieldWithLocalState('text', 'Text', componentWithProps.props?.text || componentWithProps.props?.label, (val) => handlePropertyChange('text', val))}
+            {createTextFieldWithLocalState('elevation', 'Elevation', componentWithProps.props?.elevation || 3, (val) => handlePropertyChange('elevation', val), { type: 'number' })}
           </>
         );
 
       case 'Amount':
         return (
           <>
-            <TextField
-              label="Label"
-              value={componentWithProps.props?.label || ''}
-              onChange={(e) => handlePropertyChange('label', e.target.value)}
-              size="small"
-              fullWidth
-              sx={{ mt: 0.75 }}
-            />
-            <TextField
-              label="Currency Symbol"
-              value={componentWithProps.props?.currency || componentWithProps.props?.currencySymbol || '$'}
-              onChange={(e) => handlePropertyChange('currency', e.target.value)}
-              size="small"
-              fullWidth
-              sx={{ mt: 0.75 }}
-            />
-            <TextField
-              label="Decimal Places"
-              type="number"
-              value={componentWithProps.props?.decimalPlaces ?? 2}
-              onChange={(e) => handlePropertyChange('decimalPlaces', Number(e.target.value))}
-              size="small"
-              fullWidth
-              sx={{ mt: 0.75 }}
-            />
-            <TextField
-              label="Min Value"
-              type="number"
-              value={componentWithProps.props?.min || ''}
-              onChange={(e) => handlePropertyChange('min', e.target.value ? Number(e.target.value) : undefined)}
-              size="small"
-              fullWidth
-              sx={{ mt: 0.75 }}
-            />
-            <TextField
-              label="Max Value"
-              type="number"
-              value={componentWithProps.props?.max || ''}
-              onChange={(e) => handlePropertyChange('max', e.target.value ? Number(e.target.value) : undefined)}
-              size="small"
-              fullWidth
-              sx={{ mt: 0.75 }}
-            />
+            {createTextFieldWithLocalState('label', 'Label', componentWithProps.props?.label, (val) => handlePropertyChange('label', val))}
+            {createTextFieldWithLocalState('currency', 'Currency Symbol', componentWithProps.props?.currency || componentWithProps.props?.currencySymbol || '$', (val) => handlePropertyChange('currency', val))}
+            {createTextFieldWithLocalState('decimalPlaces', 'Decimal Places', componentWithProps.props?.decimalPlaces ?? 2, (val) => handlePropertyChange('decimalPlaces', val), { type: 'number' })}
+            {createTextFieldWithLocalState('min', 'Min Value', componentWithProps.props?.min, (val) => handlePropertyChange('min', val), { type: 'number' })}
+            {createTextFieldWithLocalState('max', 'Max Value', componentWithProps.props?.max, (val) => handlePropertyChange('max', val), { type: 'number' })}
           </>
         );
 
       case 'Wizard':
         return (
           <>
-            <TextField
-              label="Label"
-              value={componentWithProps.props?.label || ''}
-              onChange={(e) => handlePropertyChange('label', e.target.value)}
-              size="small"
-              fullWidth
-              sx={{ mt: 0.75 }}
-            />
+            {createTextFieldWithLocalState('label', 'Label', componentWithProps.props?.label, (val) => handlePropertyChange('label', val))}
             <Box sx={{ mt: 1 }}>
               <Typography variant="caption">Steps (one per line)</Typography>
-              <TextField
-                value={(componentWithProps.props?.steps || []).join('\n')}
-                onChange={(e) => {
-                  const steps = e.target.value.split('\n').filter((s) => s.trim());
-                  handlePropertyChange('steps', steps);
-                }}
-                size="small"
-                fullWidth
-                multiline
-                rows={4}
-                sx={{ mt: 0.5 }}
-              />
+              {(() => {
+                const fieldKey = `${component.id}.steps`;
+                const stepsValue = (componentWithProps.props?.steps || []).join('\n');
+                const localValue = focusedFieldRef.current === fieldKey 
+                  ? localFieldValues[fieldKey] ?? stepsValue
+                  : stepsValue;
+                
+                return (
+                  <TextField
+                    value={localValue}
+                    onChange={(e) => {
+                      setLocalFieldValues(prev => ({ ...prev, [fieldKey]: e.target.value }));
+                    }}
+                    onFocus={() => {
+                      focusedFieldRef.current = fieldKey;
+                      setLocalFieldValues(prev => ({ ...prev, [fieldKey]: stepsValue }));
+                    }}
+                    onBlur={(e) => {
+                      focusedFieldRef.current = null;
+                      const steps = e.target.value.split('\n').filter((s) => s.trim());
+                      handlePropertyChange('steps', steps);
+                    }}
+                    size="small"
+                    fullWidth
+                    multiline
+                    rows={4}
+                    sx={{ mt: 0.5 }}
+                  />
+                );
+              })()}
             </Box>
           </>
         );
@@ -1304,18 +1268,36 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
             </FormControl>
             <Box sx={{ mt: 1 }}>
               <Typography variant="caption">Tabs (one per line)</Typography>
-              <TextField
-                value={(componentWithProps.props?.tabs || []).join('\n')}
-                onChange={(e) => {
-                  const tabs = e.target.value.split('\n').filter((t) => t.trim());
-                  handlePropertyChange('tabs', tabs);
-                }}
-                size="small"
-                fullWidth
-                multiline
-                rows={3}
-                sx={{ mt: 0.5 }}
-              />
+              {(() => {
+                const fieldKey = `${component.id}.tabs`;
+                const tabsValue = (componentWithProps.props?.tabs || []).join('\n');
+                const localValue = focusedFieldRef.current === fieldKey 
+                  ? localFieldValues[fieldKey] ?? tabsValue
+                  : tabsValue;
+                
+                return (
+                  <TextField
+                    value={localValue}
+                    onChange={(e) => {
+                      setLocalFieldValues(prev => ({ ...prev, [fieldKey]: e.target.value }));
+                    }}
+                    onFocus={() => {
+                      focusedFieldRef.current = fieldKey;
+                      setLocalFieldValues(prev => ({ ...prev, [fieldKey]: tabsValue }));
+                    }}
+                    onBlur={(e) => {
+                      focusedFieldRef.current = null;
+                      const tabs = e.target.value.split('\n').filter((t) => t.trim());
+                      handlePropertyChange('tabs', tabs);
+                    }}
+                    size="small"
+                    fullWidth
+                    multiline
+                    rows={3}
+                    sx={{ mt: 0.5 }}
+                  />
+                );
+              })()}
             </Box>
           </>
         );
@@ -1323,14 +1305,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
       case 'CheckBox':
         return (
           <>
-            <TextField
-              label="Label"
-              value={componentWithProps.props?.label || ''}
-              onChange={(e) => handlePropertyChange('label', e.target.value)}
-              size="small"
-              fullWidth
-              sx={{ mt: 0.75 }}
-            />
+            {createTextFieldWithLocalState('label', 'Label', componentWithProps.props?.label, (val) => handlePropertyChange('label', val))}
             <FormControlLabel
               control={
                 <Switch
@@ -1389,48 +1364,18 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
       case 'RadioGroup':
         return (
           <>
-            <TextField
-              label="Label"
-              value={componentWithProps.props?.label || ''}
-              onChange={(e) => handlePropertyChange('label', e.target.value)}
-              size="small"
-              fullWidth
-              sx={{ mt: 0.75 }}
-            />
-            <TextField
-              label="Default Value"
-              value={componentWithProps.props?.value || componentWithProps.props?.defaultValue || ''}
-              onChange={(e) => {
-                handlePropertyChange('value', e.target.value);
-                handlePropertyChange('defaultValue', e.target.value);
-              }}
-              size="small"
-              fullWidth
-              sx={{ mt: 0.75 }}
-            />
+            {createTextFieldWithLocalState('label', 'Label', componentWithProps.props?.label, (val) => handlePropertyChange('label', val))}
+            {createTextFieldWithLocalState('defaultValue', 'Default Value', componentWithProps.props?.value || componentWithProps.props?.defaultValue, (val) => {
+              handlePropertyChange('value', val);
+              handlePropertyChange('defaultValue', val);
+            })}
             <Box sx={{ mt: 1 }}>
-              <Typography variant="caption">Options (one per line, or key:value format)</Typography>
-              <TextField
-                value={(componentWithProps.props?.options || []).map((opt: any) => 
-                  typeof opt === 'string' ? opt : `${opt.value || opt.key}:${opt.label || opt.value || opt.key}`
-                ).join('\n')}
-                onChange={(e) => {
-                  const lines = e.target.value.split('\n').filter((o) => o.trim());
-                  const options = lines.map((line) => {
-                    if (line.includes(':')) {
-                      const [value, label] = line.split(':').map(s => s.trim());
-                      return { value, label: label || value };
-                    }
-                    return line;
-                  });
-                  handlePropertyChange('options', options);
-                }}
-                size="small"
-                fullWidth
-                multiline
-                rows={4}
-                sx={{ mt: 0.5 }}
-                helperText="Format: option1 or value1:Label 1"
+              <Typography variant="caption">Options (semicolon-separated, or key:value format)</Typography>
+              <OptionsInput
+                options={componentWithProps.props?.options || []}
+                onChange={(options) => handlePropertyChange('options', options)}
+                format="keyvalue"
+                helperText="Format: option1; option2 or value1:Label 1; value2:Label 2"
               />
             </Box>
             <FormControlLabel
@@ -1463,14 +1408,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
       case 'Toggle':
         return (
           <>
-            <TextField
-              label="Label"
-              value={componentWithProps.props?.label || ''}
-              onChange={(e) => handlePropertyChange('label', e.target.value)}
-              size="small"
-              fullWidth
-              sx={{ mt: 0.75 }}
-            />
+            {createTextFieldWithLocalState('label', 'Label', componentWithProps.props?.label, (val) => handlePropertyChange('label', val))}
             <FormControlLabel
               control={
                 <Switch
@@ -1519,25 +1457,11 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
       case 'DateTimeCb':
         return (
           <>
-            <TextField
-              label="Label"
-              value={componentWithProps.props?.label || ''}
-              onChange={(e) => handlePropertyChange('label', e.target.value)}
-              size="small"
-              fullWidth
-              sx={{ mt: 0.75 }}
-            />
-            <TextField
-              label="Default Value"
-              value={componentWithProps.props?.value || componentWithProps.props?.defaultValue || ''}
-              onChange={(e) => {
-                handlePropertyChange('value', e.target.value);
-                handlePropertyChange('defaultValue', e.target.value);
-              }}
-              size="small"
-              fullWidth
-              sx={{ mt: 0.75 }}
-            />
+            {createTextFieldWithLocalState('label', 'Label', componentWithProps.props?.label, (val) => handlePropertyChange('label', val))}
+            {createTextFieldWithLocalState('defaultValue', 'Default Value', componentWithProps.props?.value || componentWithProps.props?.defaultValue, (val) => {
+              handlePropertyChange('value', val);
+              handlePropertyChange('defaultValue', val);
+            })}
             <FormControl fullWidth sx={{ mt: 1 }}>
               <InputLabel>Type</InputLabel>
               <Select
@@ -1553,34 +1477,16 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
                 <MenuItem value="week">Week</MenuItem>
               </Select>
             </FormControl>
-            <TextField
-              label="Min Date/Time"
-              value={componentWithProps.props?.min || ''}
-              onChange={(e) => handlePropertyChange('min', e.target.value)}
-              size="small"
-              fullWidth
-              sx={{ mt: 0.75 }}
-              helperText="Format: YYYY-MM-DD or YYYY-MM-DDTHH:mm"
-            />
-            <TextField
-              label="Max Date/Time"
-              value={componentWithProps.props?.max || ''}
-              onChange={(e) => handlePropertyChange('max', e.target.value)}
-              size="small"
-              fullWidth
-              sx={{ mt: 0.75 }}
-              helperText="Format: YYYY-MM-DD or YYYY-MM-DDTHH:mm"
-            />
-            <TextField
-              label="Step (seconds)"
-              type="number"
-              value={componentWithProps.props?.step || ''}
-              onChange={(e) => handlePropertyChange('step', e.target.value ? Number(e.target.value) : undefined)}
-              size="small"
-              fullWidth
-              sx={{ mt: 0.75 }}
-              helperText="For time inputs, step in seconds"
-            />
+            {createTextFieldWithLocalState('min', 'Min Date/Time', componentWithProps.props?.min, (val) => handlePropertyChange('min', val), {
+              helperText: 'Format: YYYY-MM-DD or YYYY-MM-DDTHH:mm'
+            })}
+            {createTextFieldWithLocalState('max', 'Max Date/Time', componentWithProps.props?.max, (val) => handlePropertyChange('max', val), {
+              helperText: 'Format: YYYY-MM-DD or YYYY-MM-DDTHH:mm'
+            })}
+            {createTextFieldWithLocalState('step', 'Step (seconds)', componentWithProps.props?.step, (val) => handlePropertyChange('step', val), {
+              type: 'number',
+              helperText: 'For time inputs, step in seconds'
+            })}
             <FormControl fullWidth sx={{ mt: 1 }}>
               <InputLabel>Variant</InputLabel>
               <Select
@@ -1626,16 +1532,10 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
                 <MenuItem value="column">Column (Stacked)</MenuItem>
               </Select>
             </FormControl>
-            <TextField
-              label="Gap"
-              type="number"
-              value={componentWithProps.props?.gap || 1.5}
-              onChange={(e) => handlePropertyChange('gap', e.target.value ? Number(e.target.value) : 1.5)}
-              size="small"
-              fullWidth
-              sx={{ mt: 0.75 }}
-              helperText="Spacing between items (in theme spacing units)"
-            />
+            {createTextFieldWithLocalState('gap', 'Gap', componentWithProps.props?.gap || 1.5, (val) => handlePropertyChange('gap', val), {
+              type: 'number',
+              helperText: 'Spacing between items (in theme spacing units)'
+            })}
             <FormControl fullWidth sx={{ mt: 1 }}>
               <InputLabel>Align Items</InputLabel>
               <Select
@@ -1758,15 +1658,9 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
                 ))}
               </Select>
             </FormControl>
-            <TextField
-              label="Min Height"
-              value={componentWithProps.props?.height || '150px'}
-              onChange={(e) => handlePropertyChange('height', e.target.value)}
-              size="small"
-              fullWidth
-              sx={{ mt: 0.75 }}
-              helperText="e.g., 150px, 200px, auto"
-            />
+            {createTextFieldWithLocalState('height', 'Min Height', componentWithProps.props?.height || '150px', (val) => handlePropertyChange('height', val), {
+              helperText: 'e.g., 150px, 200px, auto'
+            })}
           </>
         );
 
@@ -1774,42 +1668,23 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
       case 'RepeaterEx':
         return (
           <>
-            <TextField
-              label="Label"
-              value={componentWithProps.props?.label || ''}
-              onChange={(e) => handlePropertyChange('label', e.target.value)}
-              size="small"
-              fullWidth
-              sx={{ mt: 0.75 }}
-            />
-            <TextField
-              label="Min Items"
-              type="number"
-              value={componentWithProps.props?.min || componentWithProps.props?.minItems || 0}
-              onChange={(e) => {
-                const value = e.target.value ? Number(e.target.value) : 0;
-                handlePropertyChange('min', value);
-                handlePropertyChange('minItems', value);
-              }}
-              size="small"
-              fullWidth
-              sx={{ mt: 0.75 }}
-              helperText="Minimum number of items required"
-            />
-            <TextField
-              label="Max Items"
-              type="number"
-              value={componentWithProps.props?.max || componentWithProps.props?.maxItems || ''}
-              onChange={(e) => {
-                const value = e.target.value ? Number(e.target.value) : undefined;
-                handlePropertyChange('max', value);
-                handlePropertyChange('maxItems', value);
-              }}
-              size="small"
-              fullWidth
-              sx={{ mt: 0.75 }}
-              helperText="Maximum number of items allowed (leave empty for unlimited)"
-            />
+            {createTextFieldWithLocalState('label', 'Label', componentWithProps.props?.label, (val) => handlePropertyChange('label', val))}
+            {createTextFieldWithLocalState('minItems', 'Min Items', componentWithProps.props?.min || componentWithProps.props?.minItems || 0, (val) => {
+              const numVal = typeof val === 'number' ? val : (val ? Number(val) : 0);
+              handlePropertyChange('min', numVal);
+              handlePropertyChange('minItems', numVal);
+            }, {
+              type: 'number',
+              helperText: 'Minimum number of items required'
+            })}
+            {createTextFieldWithLocalState('maxItems', 'Max Items', componentWithProps.props?.max || componentWithProps.props?.maxItems, (val) => {
+              const numVal = val === '' || val === undefined ? undefined : (typeof val === 'number' ? val : Number(val));
+              handlePropertyChange('max', numVal);
+              handlePropertyChange('maxItems', numVal);
+            }, {
+              type: 'number',
+              helperText: 'Maximum number of items allowed (leave empty for unlimited)'
+            })}
             <Box sx={{ mt: 1 }}>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
                 <Typography variant="caption" sx={{ fontWeight: 600 }}>
@@ -1912,51 +1787,39 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
                 }}
               />
               {/* Fallback to text input for static data/function */}
-              <TextField
-                label="Or enter static data/function (JSON array or function)"
-                value={
-                  componentWithProps.props?.dataProvider &&
-                  typeof componentWithProps.props.dataProvider === 'string' &&
-                  (getDataviewData(componentWithProps.props.dataProvider) || 
-                   dataviewsList.some((dv: any) => (dv.id || dv.dataview_id) === componentWithProps.props.dataProvider))
-                    ? '' // Hide text input nëse është dataview reference
-                    : componentWithProps.props?.dataProvider &&
-                      typeof componentWithProps.props.dataProvider === 'object' &&
-                      'dataview_id' in componentWithProps.props.dataProvider
-                    ? ''
-                    : typeof componentWithProps.props?.dataProvider === 'string'
-                    ? componentWithProps.props.dataProvider
-                    : Array.isArray(componentWithProps.props?.dataProvider)
-                    ? JSON.stringify(componentWithProps.props.dataProvider, null, 2)
-                    : ''
-                }
-                onChange={(e) => {
+              {(() => {
+                const dataProviderValue = componentWithProps.props?.dataProvider;
+                const isDataview: boolean = Boolean(
+                  (typeof dataProviderValue === 'string' &&
+                   (!!getDataviewData(dataProviderValue) || 
+                    dataviewsList.some((dv: any) => (dv.id || dv.dataview_id) === dataProviderValue))) ||
+                  (typeof dataProviderValue === 'object' && dataProviderValue !== null && 'dataview_id' in dataProviderValue)
+                );
+                
+                const stringValue = isDataview
+                  ? ''
+                  : typeof dataProviderValue === 'string'
+                  ? dataProviderValue
+                  : Array.isArray(dataProviderValue)
+                  ? JSON.stringify(dataProviderValue, null, 2)
+                  : '';
+                
+                return createMultilineTextFieldWithLocalState('repeaterDataProvider', 'Or enter static data/function (JSON array or function)', stringValue, (val) => {
                   try {
-                    const parsed = JSON.parse(e.target.value);
+                    const parsed = JSON.parse(String(val));
                     handlePropertyChange('dataProvider', parsed);
                     setDataviewFields([]);
                   } catch {
                     // If not valid JSON, treat as function string
-                    handlePropertyChange('dataProvider', e.target.value);
+                    handlePropertyChange('dataProvider', val);
                     setDataviewFields([]);
                   }
-                }}
-                size="small"
-                fullWidth
-                multiline
-                rows={4}
-                sx={{ mt: 1 }}
-                helperText="Array of data objects or JavaScript function: (data, component) => []"
-                disabled={
-                  (componentWithProps.props?.dataProvider &&
-                  typeof componentWithProps.props.dataProvider === 'object' &&
-                  'dataview_id' in componentWithProps.props.dataProvider) ||
-                  (componentWithProps.props?.dataProvider &&
-                  typeof componentWithProps.props.dataProvider === 'string' &&
-                  (getDataviewData(componentWithProps.props.dataProvider) || 
-                   dataviewsList.some((dv: any) => (dv.id || dv.dataview_id) === componentWithProps.props.dataProvider)))
-                }
-              />
+                }, {
+                  rows: 4,
+                  helperText: "Array of data objects or JavaScript function: (data, component) => []",
+                  disabled: isDataview
+                });
+              })()}
             </Box>
             <Box sx={{ mt: 1.5 }}>
               <Typography variant="caption" sx={{ display: 'block', mb: 0.5 }}>
@@ -1974,14 +1837,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
       case 'DataGrid':
         return (
           <>
-            <TextField
-              label="Label"
-              value={componentWithProps.props?.label || ''}
-              onChange={(e) => handlePropertyChange('label', e.target.value)}
-              size="small"
-              fullWidth
-              sx={{ mt: 0.75 }}
-            />
+            {createTextFieldWithLocalState('label', 'Label', componentWithProps.props?.label, (val) => handlePropertyChange('label', val))}
             <Box sx={{ mt: 1 }}>
               <Typography variant="caption" sx={{ display: 'block', mb: 0.5, fontWeight: 600 }}>
                 Data Source
@@ -2075,87 +1931,288 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
                       const sourceType = currentSourceType;
                 
                 if (sourceType === 'static') {
+                  const rowsData = (Array.isArray(componentWithProps.props?.dataSource) && componentWithProps.props.dataSource.length > 0) ? componentWithProps.props.dataSource :
+                    (Array.isArray(componentWithProps.props?.rows) && componentWithProps.props.rows.length > 0) ? componentWithProps.props.rows :
+                    (Array.isArray(componentWithProps.props?.data) && componentWithProps.props.data.length > 0) ? componentWithProps.props.data :
+                    [];
+                  
                   return (
                     <>
                       <Typography variant="caption">Rows Data (JSON array)</Typography>
-                      <TextField
-                        value={JSON.stringify(
-                          (Array.isArray(componentWithProps.props?.dataSource) && componentWithProps.props.dataSource.length > 0) ? componentWithProps.props.dataSource :
-                          (Array.isArray(componentWithProps.props?.rows) && componentWithProps.props.rows.length > 0) ? componentWithProps.props.rows :
-                          (Array.isArray(componentWithProps.props?.data) && componentWithProps.props.data.length > 0) ? componentWithProps.props.data :
-                          [], 
-                          null, 
-                          2
-                        )}
-                        onChange={(e) => {
-                          try {
-                            const parsed = JSON.parse(e.target.value);
-                            // Set all three properties to ensure compatibility
-                            handlePropertyChange('dataSource', parsed);
-                            handlePropertyChange('rows', parsed);
-                            handlePropertyChange('data', parsed);
-                          } catch {
-                            // If JSON is invalid, still try to save as string for user to fix
-                            handlePropertyChange('dataSource', e.target.value);
-                          }
-                        }}
-                        size="small"
-                        fullWidth
-                        multiline
-                        rows={6}
-                        sx={{ mt: 0.5 }}
-                        helperText="Array of objects, e.g., [{id: 1, name: 'John'}, {id: 2, name: 'Jane'}]"
-                      />
+                      {createMultilineTextFieldWithLocalState('dataGridRows', 'Rows Data', rowsData, (val) => {
+                        handlePropertyChange('dataSource', val);
+                        handlePropertyChange('rows', val);
+                        handlePropertyChange('data', val);
+                      }, {
+                        rows: 6,
+                        parseJson: true,
+                        parseArray: true,
+                        helperText: "Array of objects, e.g., [{id: 1, name: 'John'}, {id: 2, name: 'Jane'}]"
+                      })}
                       <Typography variant="caption" sx={{ display: 'block', mt: 1, mb: 0.5 }}>Columns</Typography>
-                      <TextField
-                        value={JSON.stringify(componentWithProps.props?.columns || [], null, 2)}
-                        onChange={(e) => {
-                          try {
-                            const parsed = JSON.parse(e.target.value);
-                            handlePropertyChange('columns', parsed);
-                          } catch {}
-                        }}
-                        size="small"
-                        fullWidth
-                        multiline
-                        rows={4}
-                        helperText="Array of column definitions, e.g., [{field: 'id', headerName: 'ID'}, {field: 'name', headerName: 'Name'}]"
-                      />
+                      {createMultilineTextFieldWithLocalState('dataGridColumns', 'Columns', componentWithProps.props?.columns || [], (val) => {
+                        handlePropertyChange('columns', val);
+                      }, {
+                        rows: 4,
+                        parseJson: true,
+                        parseArray: true,
+                        helperText: "Array of column definitions, e.g., [{field: 'id', headerName: 'ID'}, {field: 'name', headerName: 'Name'}]"
+                      })}
                     </>
                   );
                 } else if (sourceType === 'function' && advancedMode) {
+                  const functionValue = typeof componentWithProps.props?.dataSource === 'function'
+                    ? componentWithProps.props.dataSource.toString()
+                    : String(componentWithProps.props?.dataSource || '');
+                  
                   return (
-                    <TextField
-                      label="Function Name or Code"
-                      value={
-                        typeof componentWithProps.props?.dataSource === 'function'
-                          ? componentWithProps.props.dataSource.toString()
-                          : String(componentWithProps.props?.dataSource || '')
-                      }
-                      onChange={(e) => {
-                        const value = e.target.value.trim();
-                        // If it's just a function name (simple identifier), save as string for external import
-                        if (value.match(/^[a-zA-Z_$][a-zA-Z0-9_$]*$/)) {
+                    createMultilineTextFieldWithLocalState('dataGridFunction', 'Function Name or Code', functionValue, (val) => {
+                      const value = String(val).trim();
+                      // If it's just a function name (simple identifier), save as string for external import
+                      if (value.match(/^[a-zA-Z_$][a-zA-Z0-9_$]*$/)) {
+                        handlePropertyChange('dataSource', value);
+                      } else {
+                        // Try to parse as function code
+                        try {
+                          const fn = new Function('data', 'component', `return ${value}`);
+                          handlePropertyChange('dataSource', fn);
+                        } catch {
+                          // If parsing fails, save as string (might be function name or invalid code)
                           handlePropertyChange('dataSource', value);
-                        } else {
-                          // Try to parse as function code
-                          try {
-                            const fn = new Function('data', 'component', `return ${value}`);
-                            handlePropertyChange('dataSource', fn);
-                          } catch {
-                            // If parsing fails, save as string (might be function name or invalid code)
-                            handlePropertyChange('dataSource', value);
-                          }
                         }
-                      }}
-                      size="small"
-                      fullWidth
-                      multiline
-                      rows={4}
-                      sx={{ mt: 0.5 }}
-                      placeholder="fetchConsumers or (data, component) => { return [{id: 1, name: 'John'}]; }"
-                      helperText="Enter function name (e.g., 'fetchConsumers') for external API import, or full function code for inline function"
-                    />
+                      }
+                    }, {
+                      rows: 4,
+                      placeholder: "fetchConsumers or (data, component) => { return [{id: 1, name: 'John'}]; }",
+                      helperText: "Enter function name (e.g., 'fetchConsumers') for external API import, or full function code for inline function"
+                    })
+                  );
+                } else if (sourceType === 'dataview') {
+                  return (
+                    <Box sx={{ mt: 0.5 }}>
+                      <AutoBrowse
+                        value={
+                          componentWithProps.props?.dataSource && 
+                          typeof componentWithProps.props.dataSource === 'string' &&
+                          componentWithProps.props.dataSource !== '__DATAVIEW_PENDING__'
+                            ? dataviewsList.filter(
+                                (dv: any) => (dv.id || dv.dataview_id) === componentWithProps.props.dataSource
+                              )
+                            : componentWithProps.props?.dataSource && 
+                              typeof componentWithProps.props.dataSource === 'object' &&
+                              'dataview_id' in componentWithProps.props.dataSource
+                            ? [componentWithProps.props.dataSource]
+                            : []
+                        }
+                        valueField="dataview_id"
+                        labelField="description"
+                        dataProvider={dataviewsList}
+                        loading={dataviewsLoading}
+                        disabled={dataviewsLoading || !dataviewManager.list.totalRecords}
+                        onChange={async (selected) => {
+                          if (selected && selected.length > 0) {
+                            const dataview = selected[0];
+                            const dataviewId = dataview.id || dataview.dataview_id;
+                            
+                            // Store only string reference in JSON (like the old project)
+                            handlePropertyChange('dataSource', dataviewId);
+                            
+                            try {
+                              // Load fields
+                              const fields = await dataviewManager.loadDataviewFields(dataviewId);
+                              setDataviewFields(fields);
+                              
+                              // Load and cache data for builder preview
+                              const data = await dataviewManager.loadDataview(dataviewId);
+                              console.log('DataGrid: Loaded dataview data:', dataviewId, data?.length, 'records');
+                              
+                              // Ensure data is an array
+                              const dataArray = Array.isArray(data) ? data : [];
+                              setDataviewData(dataviewId, dataArray);
+                              
+                              // Auto-populate columns if not already set - include all fields by default
+                              if (fields.length > 0) {
+                                const existingColumns = componentWithProps.props?.columns || [];
+                                const existingFieldNames = new Set(existingColumns.map((col: any) => typeof col === 'string' ? col : col.field));
+                                
+                                // If we have data, use the first row to get all available fields (in case fields list is incomplete)
+                                const allFields = dataArray.length > 0 
+                                  ? Object.keys(dataArray[0])
+                                  : fields;
+                                
+                                // Create columns for all fields, preserving existing column configs
+                                const autoColumns = allFields.map((field: string) => {
+                                  // Check if column already exists
+                                  const existingCol = existingColumns.find((col: any) => 
+                                    (typeof col === 'string' ? col : col.field) === field
+                                  );
+                                  
+                                  if (existingCol && typeof existingCol === 'object') {
+                                    // Preserve existing column config, ensure visible is true by default
+                                    return {
+                                      ...existingCol,
+                                      visible: existingCol.visible !== false, // Default to visible
+                                    };
+                                  }
+                                  
+                                  // Create new column config
+                                  return {
+                                    field: field,
+                                    headerName: field.charAt(0).toUpperCase() + field.slice(1).replace(/_/g, ' '),
+                                    width: 150,
+                                    visible: true, // Show all columns by default
+                                  };
+                                });
+                                
+                                console.log('DataGrid: Auto-populated columns:', autoColumns.length);
+                                handlePropertyChange('columns', autoColumns);
+                              }
+                            } catch (error) {
+                              console.error('Failed to load dataview:', error);
+                              setDataviewFields([]);
+                            }
+                          } else {
+                            handlePropertyChange('dataSource', undefined);
+                            setDataviewFields([]);
+                          }
+                        }}
+                        onDataviewSelect={async (dataview) => {
+                          const dataviewId = dataview.id || dataview.dataview_id;
+                          try {
+                            const fields = await dataviewManager.loadDataviewFields(dataviewId);
+                            setDataviewFields(fields);
+                            
+                            // Load and cache data for builder preview
+                            const data = await dataviewManager.loadDataview(dataviewId);
+                            console.log('DataGrid: Loaded dataview data (onDataviewSelect):', dataviewId, data?.length, 'records');
+                            
+                            // Ensure data is an array
+                            const dataArray = Array.isArray(data) ? data : [];
+                            setDataviewData(dataviewId, dataArray);
+                            
+                            // Auto-populate columns if not already set - include all fields by default
+                            if (fields.length > 0) {
+                              const existingColumns = componentWithProps.props?.columns || [];
+                              
+                              // If we have data, use the first row to get all available fields (in case fields list is incomplete)
+                              const allFields = dataArray.length > 0 
+                                ? Object.keys(dataArray[0])
+                                : fields;
+                              
+                              // Create columns for all fields, preserving existing column configs
+                              const autoColumns = allFields.map((field: string) => {
+                                // Check if column already exists
+                                const existingCol = existingColumns.find((col: any) => 
+                                  (typeof col === 'string' ? col : col.field) === field
+                                );
+                                
+                                if (existingCol && typeof existingCol === 'object') {
+                                  // Preserve existing column config, ensure visible is true by default
+                                  return {
+                                    ...existingCol,
+                                    visible: existingCol.visible !== false, // Default to visible
+                                  };
+                                }
+                                
+                                // Create new column config
+                                return {
+                                  field: field,
+                                  headerName: field.charAt(0).toUpperCase() + field.slice(1).replace(/_/g, ' '),
+                                  width: 150,
+                                  visible: true, // Show all columns by default
+                                };
+                              });
+                              
+                              console.log('DataGrid: Auto-populated columns (onDataviewSelect):', autoColumns.length);
+                              handlePropertyChange('columns', autoColumns);
+                            }
+                          } catch (error) {
+                            console.error('Failed to load dataview:', error);
+                            setDataviewFields([]);
+                          }
+                        }}
+                      />
+                      
+                      {/* Data Preview and Column Visibility Management */}
+                      {(() => {
+                        const currentDataSource = componentWithProps.props?.dataSource;
+                        const dataviewId = typeof currentDataSource === 'string' && currentDataSource !== '__DATAVIEW_PENDING__' 
+                          ? currentDataSource 
+                          : null;
+                        const previewData = dataviewId ? getDataviewData(dataviewId) : null;
+                        
+                        return (
+                          <>
+                            {/* Data Preview */}
+                            {previewData && Array.isArray(previewData) && previewData.length > 0 && (
+                              <Box sx={{ mt: 2, p: 1.5, border: '1px solid', borderColor: 'divider', borderRadius: 1, bgcolor: 'grey.50' }}>
+                                <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
+                                  Data Preview ({previewData.length} records)
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                                  Showing first 3 records from the selected dataview
+                                </Typography>
+                                <Box sx={{ maxHeight: 200, overflow: 'auto' }}>
+                                  {previewData.slice(0, 3).map((record: any, idx: number) => (
+                                    <Box key={idx} sx={{ mb: 1, p: 1, bgcolor: 'white', borderRadius: 0.5, fontSize: '0.75rem' }}>
+                                      <Typography variant="caption" sx={{ fontFamily: 'monospace', whiteSpace: 'pre-wrap' }}>
+                                        {JSON.stringify(record, null, 2)}
+                                      </Typography>
+                                    </Box>
+                                  ))}
+                                </Box>
+                              </Box>
+                            )}
+                            
+                            {/* Column Visibility Management */}
+                            {dataviewFields.length > 0 && componentWithProps.props?.columns && componentWithProps.props.columns.length > 0 && (
+                        <Box sx={{ mt: 2, p: 1.5, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+                          <Typography variant="subtitle2" sx={{ mb: 1.5, fontWeight: 600 }}>
+                            Column Visibility
+                          </Typography>
+                          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                            {componentWithProps.props.columns.map((col: any, index: number) => {
+                              const field = typeof col === 'string' ? col : col.field;
+                              const headerName = typeof col === 'string' ? col : (col.headerName || col.field);
+                              const isVisible = typeof col === 'string' ? true : (col.visible !== false);
+                              
+                              return (
+                                <FormControlLabel
+                                  key={index}
+                                  control={
+                                    <Switch
+                                      checked={isVisible}
+                                      onChange={(e) => {
+                                        const updatedColumns = [...(componentWithProps.props?.columns || [])];
+                                        if (typeof updatedColumns[index] === 'string') {
+                                          // Convert string to object
+                                          updatedColumns[index] = {
+                                            field: updatedColumns[index],
+                                            headerName: updatedColumns[index],
+                                            visible: e.target.checked,
+                                          };
+                                        } else {
+                                          updatedColumns[index] = {
+                                            ...updatedColumns[index],
+                                            visible: e.target.checked,
+                                          };
+                                        }
+                                        handlePropertyChange('columns', updatedColumns);
+                                      }}
+                                      size="small"
+                                    />
+                                  }
+                                  label={headerName || field}
+                                />
+                              );
+                            })}
+                          </Box>
+                        </Box>
+                      )}
+                          </>
+                        );
+                      })()}
+                    </Box>
                   );
                 } else if (sourceType === 'computed' && advancedMode) {
                   return (
@@ -2170,15 +2227,9 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
                   );
                 } else if (sourceType === 'dataKey') {
                   return (
-                    <TextField
-                      label="Data Key"
-                      value={String(componentWithProps.props?.dataSource || '')}
-                      onChange={(e) => handlePropertyChange('dataSource', e.target.value)}
-                      size="small"
-                      fullWidth
-                      sx={{ mt: 0.5 }}
-                      helperText="Key in form data store that contains the rows array"
-                    />
+                    createTextFieldWithLocalState('dataSource', 'Data Key', componentWithProps.props?.dataSource, (val) => handlePropertyChange('dataSource', val), {
+                      helperText: 'Key in form data store that contains the rows array'
+                    })
                   );
                 }
                 return null;
@@ -2193,14 +2244,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
       case 'List':
         return (
           <>
-            <TextField
-              label="Label"
-              value={componentWithProps.props?.label || ''}
-              onChange={(e) => handlePropertyChange('label', e.target.value)}
-              size="small"
-              fullWidth
-              sx={{ mt: 0.75 }}
-            />
+            {createTextFieldWithLocalState('label', 'Label', componentWithProps.props?.label, (val) => handlePropertyChange('label', val))}
             <Box sx={{ mt: 1 }}>
               <Typography variant="caption" sx={{ display: 'block', mb: 0.5, fontWeight: 600 }}>
                 Items Data Source
@@ -2448,14 +2492,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
       case 'Tree':
         return (
           <>
-            <TextField
-              label="Label"
-              value={componentWithProps.props?.label || ''}
-              onChange={(e) => handlePropertyChange('label', e.target.value)}
-              size="small"
-              fullWidth
-              sx={{ mt: 0.75 }}
-            />
+            {createTextFieldWithLocalState('label', 'Label', componentWithProps.props?.label, (val) => handlePropertyChange('label', val))}
             <Box sx={{ mt: 1 }}>
               <Typography variant="caption" sx={{ display: 'block', mb: 0.5, fontWeight: 600 }}>
                 Tree Data Source
@@ -2600,49 +2637,35 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
                   return (
                     <>
                       <Typography variant="caption">Tree Data (JSON array)</Typography>
-                      <TextField
-                        value={JSON.stringify(componentWithProps.props?.data || componentWithProps.props?.treeData || [], null, 2)}
-                        onChange={(e) => {
-                          try {
-                            const parsed = JSON.parse(e.target.value);
-                            handlePropertyChange('data', parsed);
-                            handlePropertyChange('treeData', parsed);
-                          } catch {}
-                        }}
-                        size="small"
-                        fullWidth
-                        multiline
-                        rows={6}
-                        sx={{ mt: 0.5 }}
-                        helperText="Array of tree nodes, e.g., [{id: '1', label: 'Node 1', children: [{id: '1-1', label: 'Child 1'}]}]"
-                      />
+                      {createMultilineTextFieldWithLocalState('treeData', 'Tree Data', componentWithProps.props?.data || componentWithProps.props?.treeData || [], (val) => {
+                        handlePropertyChange('data', val);
+                        handlePropertyChange('treeData', val);
+                      }, {
+                        rows: 6,
+                        parseJson: true,
+                        parseArray: true,
+                        helperText: "Array of tree nodes, e.g., [{id: '1', label: 'Node 1', children: [{id: '1-1', label: 'Child 1'}]}]"
+                      })}
                     </>
                   );
                 } else if (sourceType === 'function' && advancedMode) {
+                  const functionValue = typeof componentWithProps.props?.dataSource === 'function'
+                    ? componentWithProps.props.dataSource.toString()
+                    : String(componentWithProps.props?.dataSource || '');
+                  
                   return (
-                    <TextField
-                      label="Function Source Code"
-                      value={
-                        typeof componentWithProps.props?.dataSource === 'function'
-                          ? componentWithProps.props.dataSource.toString()
-                          : String(componentWithProps.props?.dataSource || '')
+                    createMultilineTextFieldWithLocalState('treeFunction', 'Function Source Code', functionValue, (val) => {
+                      try {
+                        const fn = new Function('data', 'component', `return ${val}`);
+                        handlePropertyChange('dataSource', fn);
+                      } catch {
+                        handlePropertyChange('dataSource', val);
                       }
-                      onChange={(e) => {
-                        try {
-                          const fn = new Function('data', 'component', `return ${e.target.value}`);
-                          handlePropertyChange('dataSource', fn);
-                        } catch {
-                          handlePropertyChange('dataSource', e.target.value);
-                        }
-                      }}
-                      size="small"
-                      fullWidth
-                      multiline
-                      rows={4}
-                      sx={{ mt: 0.5 }}
-                      placeholder="(data, component) => { return [{id: '1', label: 'Node 1'}]; }"
-                      helperText="JavaScript function that returns an array of tree nodes"
-                    />
+                    }, {
+                      rows: 4,
+                      placeholder: "(data, component) => { return [{id: '1', label: 'Node 1'}]; }",
+                      helperText: "JavaScript function that returns an array of tree nodes"
+                    })
                   );
                 } else if (sourceType === 'computed' && advancedMode) {
                   return (
@@ -2657,15 +2680,9 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
                   );
                 } else if (sourceType === 'dataKey') {
                   return (
-                    <TextField
-                      label="Data Key"
-                      value={String(componentWithProps.props?.dataSource || '')}
-                      onChange={(e) => handlePropertyChange('dataSource', e.target.value)}
-                      size="small"
-                      fullWidth
-                      sx={{ mt: 0.5 }}
-                      helperText="Key in form data store that contains the tree data array"
-                    />
+                    createTextFieldWithLocalState('dataSource', 'Data Key', componentWithProps.props?.dataSource, (val) => handlePropertyChange('dataSource', val), {
+                      helperText: 'Key in form data store that contains the tree data array'
+                    })
                   );
                 }
                 return null;
@@ -2680,14 +2697,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
       case 'DataBrowse':
         return (
           <>
-            <TextField
-              label="Label"
-              value={componentWithProps.props?.label || ''}
-              onChange={(e) => handlePropertyChange('label', e.target.value)}
-              size="small"
-              fullWidth
-              sx={{ mt: 0.75 }}
-            />
+            {createTextFieldWithLocalState('label', 'Label', componentWithProps.props?.label, (val) => handlePropertyChange('label', val))}
             <Box sx={{ mt: 1 }}>
               <Typography variant="caption" sx={{ display: 'block', mb: 0.5, fontWeight: 600 }}>
                 Data Source
@@ -2950,14 +2960,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
         // Enhanced AutoComplete case with data source configuration
         return (
           <>
-            <TextField
-              label="Label"
-              value={componentWithProps.props?.label || ''}
-              onChange={(e) => handlePropertyChange('label', e.target.value)}
-              size="small"
-              fullWidth
-              sx={{ mt: 0.75 }}
-            />
+            {createTextFieldWithLocalState('label', 'Label', componentWithProps.props?.label, (val) => handlePropertyChange('label', val))}
             <Box sx={{ mt: 1 }}>
               <Typography variant="caption" sx={{ display: 'block', mb: 0.5, fontWeight: 600 }}>
                 Options Data Source
@@ -3008,49 +3011,36 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
                 if (sourceType === 'static') {
                   return (
                     <>
-                      <Typography variant="caption">Options (one per line)</Typography>
-                      <TextField
-                        value={(componentWithProps.props?.options || []).join('\n')}
-                        onChange={(e) => {
-                          const options = e.target.value.split('\n').filter((o) => o.trim());
-                          handlePropertyChange('options', options);
-                        }}
-                        size="small"
-                        fullWidth
-                        multiline
-                        rows={4}
-                        sx={{ mt: 0.5 }}
+                      <Typography variant="caption">Options (semicolon-separated)</Typography>
+                      <OptionsInput
+                        options={componentWithProps.props?.options || []}
+                        onChange={(options) => handlePropertyChange('options', options)}
+                        format="simple"
+                        helperText="Separate options with semicolons (;)"
                       />
                     </>
                   );
                 } else if (sourceType === 'function' && advancedMode) {
                   const source = componentWithProps.props?.optionsSource || componentWithProps.props?.dataSource;
+                  const functionValue = typeof source === 'function'
+                    ? source.toString()
+                    : String(source || '');
+                  
                   return (
-                    <TextField
-                      label="Function Source Code"
-                      value={
-                        typeof source === 'function'
-                          ? source.toString()
-                          : String(source || '')
+                    createMultilineTextFieldWithLocalState('autoCompleteFunction', 'Function Source Code', functionValue, (val) => {
+                      try {
+                        const fn = new Function('data', 'component', `return ${val}`);
+                        handlePropertyChange('optionsSource', fn);
+                        handlePropertyChange('dataSource', fn);
+                      } catch {
+                        handlePropertyChange('optionsSource', val);
+                        handlePropertyChange('dataSource', val);
                       }
-                      onChange={(e) => {
-                        try {
-                          const fn = new Function('data', 'component', `return ${e.target.value}`);
-                          handlePropertyChange('optionsSource', fn);
-                          handlePropertyChange('dataSource', fn);
-                        } catch {
-                          handlePropertyChange('optionsSource', e.target.value);
-                          handlePropertyChange('dataSource', e.target.value);
-                        }
-                      }}
-                      size="small"
-                      fullWidth
-                      multiline
-                      rows={4}
-                      sx={{ mt: 0.5 }}
-                      placeholder="(data, component) => { return ['Option 1', 'Option 2']; }"
-                      helperText="JavaScript function that returns an array of options"
-                    />
+                    }, {
+                      rows: 4,
+                      placeholder: "(data, component) => { return ['Option 1', 'Option 2']; }",
+                      helperText: "JavaScript function that returns an array of options"
+                    })
                   );
                 } else if (sourceType === 'computed' && advancedMode) {
                   const source = componentWithProps.props?.optionsSource || componentWithProps.props?.dataSource;
@@ -3070,18 +3060,12 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
                 } else if (sourceType === 'dataKey') {
                   const source = componentWithProps.props?.optionsSource || componentWithProps.props?.dataSource;
                   return (
-                    <TextField
-                      label="Data Key"
-                      value={String(source || '')}
-                      onChange={(e) => {
-                        handlePropertyChange('optionsSource', e.target.value);
-                        handlePropertyChange('dataSource', e.target.value);
-                      }}
-                      size="small"
-                      fullWidth
-                      sx={{ mt: 0.5 }}
-                      helperText="Key in form data store that contains the options array"
-                    />
+                    createTextFieldWithLocalState('autoCompleteDataKey', 'Data Key', source, (val) => {
+                      handlePropertyChange('optionsSource', val);
+                      handlePropertyChange('dataSource', val);
+                    }, {
+                      helperText: 'Key in form data store that contains the options array'
+                    })
                   );
                 }
                 return null;
@@ -3303,15 +3287,10 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ component }) => {
             <Typography variant="overline" sx={{ display: 'block', mb: 1.5, fontSize: '0.7rem', color: 'text.secondary', fontWeight: 600 }}>
               Data Binding
             </Typography>
-            <TextField
-              label="Data Key"
-              value={componentWithProps.props?.dataKey || ''}
-              onChange={(e) => handlePropertyChange('dataKey', e.target.value)}
-              size="small"
-              fullWidth
-              sx={{ mb: 1 }}
-              helperText="Key for automatic data binding (e.g., 'user.name')"
-            />
+            {createTextFieldWithLocalState('dataKey', 'Data Key', componentWithProps.props?.dataKey, (val) => handlePropertyChange('dataKey', val), {
+              helperText: "Key for automatic data binding (e.g., 'user.name')",
+              sx: { mb: 1 }
+            })}
             <FormControlLabel
               control={
                 <Switch

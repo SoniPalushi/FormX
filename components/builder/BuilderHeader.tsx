@@ -26,7 +26,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { useFormBuilderStore } from '../../stores/formBuilderStore';
 import { useHistoryStore } from '../../stores/historyStore';
-import { downloadPersistedForm, readFormFromFile } from '../../utils/formExport';
+import { downloadPersistedForm, readFormFromFile, exportAsStandardFormat } from '../../utils/formExport';
 import { useModeStore, useModeActions } from '../../stores/modeStore';
 import { Switch, FormControlLabel, Tooltip } from '@mui/material';
 import SaveFormDialog from './SaveFormDialog';
@@ -71,24 +71,29 @@ const BuilderHeader: React.FC = () => {
     author?: string;
   }) => {
     try {
-      // Use PersistedForm format (JSON for database)
-      downloadPersistedForm(
-        components,
-        `${metadata.formName.replace(/[^a-z0-9]/gi, '-').toLowerCase()}.json`,
-        {
-          metadata: {
-            formName: metadata.formName,
-            description: metadata.description,
-            author: metadata.author,
-            formVersion: '1.0', // Initial version
-          },
-          defaultLanguage: 'al', // Albanian as default
-          languages: [
-            { code: 'al', name: 'Albanian' },
-            { code: 'en-US', name: 'English (US)' },
-          ],
-        }
-      );
+      // Use Standard React Form Builder format (clean format without prop wrapping)
+      const standardForm = exportAsStandardFormat(components, {
+        metadata: {
+          formName: metadata.formName,
+          description: metadata.description,
+          author: metadata.author,
+          formVersion: '1.0',
+        },
+        defaultLanguage: 'al',
+        languages: [
+          { code: 'al', name: 'Albanian' },
+          { code: 'en-US', name: 'English (US)' },
+        ],
+      });
+      
+      const dataStr = JSON.stringify(standardForm, null, 2);
+      const dataBlob = new Blob([dataStr], { type: 'application/json' });
+      const url = URL.createObjectURL(dataBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${metadata.formName.replace(/[^a-z0-9]/gi, '-').toLowerCase()}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
     } catch (error) {
       alert(`Failed to save form: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }

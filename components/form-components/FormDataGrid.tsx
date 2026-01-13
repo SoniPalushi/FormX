@@ -69,34 +69,57 @@ const FormDataGrid: React.FC<FormDataGridProps> = ({ component }) => {
   // Resolve data from various sources (sync version for useMemo)
   // In builder mode, if dataSource is a dataview reference (string), get data from builder store
   const rows = useMemo(() => {
-    // In builder mode, check dataview reference
-    if (!formMode && typeof dataSource === 'string' && dataSource) {
+    // In builder mode, check dataview reference (string dataview ID)
+    if (!formMode && typeof dataSource === 'string' && dataSource && dataSource !== '__DATAVIEW_PENDING__') {
       const builderData = getDataviewData(dataSource);
-      if (builderData && Array.isArray(builderData)) {
+      if (builderData && Array.isArray(builderData) && builderData.length > 0) {
         // Display actual data for preview in builder
         return builderData;
+      }
+      // If data is not yet loaded, return empty array (will show "No data available")
+      // The data should be loaded when dataview is selected in PropertyEditor
+      if (!builderData) {
+        console.log('DataGrid: Dataview data not yet loaded for:', dataSource);
       }
     }
     
     // Form mode or static data - existing logic
-    return resolveArrayDataSourceSync({
+    // For form mode, string dataview references will be resolved at runtime
+    const resolved = resolveArrayDataSourceSync({
       source: dataSource,
       formData: data,
       component: latestComponent,
       getAllData,
       getData,
     });
+    
+    // Ensure we return an array
+    return Array.isArray(resolved) ? resolved : [];
   }, [dataSource, data, latestComponent, getAllData, getData, formMode, getDataviewData]);
   
   const label = computedLabel || latestComponent.props?.label || 'Data Grid';
   const size = latestComponent.props?.size || 'small';
   const stickyHeader = latestComponent.props?.stickyHeader !== false;
 
-  // If columns are not provided, infer from first row
-  const inferredColumns =
-    columns.length === 0 && rows.length > 0
-      ? Object.keys(rows[0]).map((key) => ({ field: key, headerName: key }))
-      : columns;
+  // Filter columns by visibility and prepare for display
+  const visibleColumns = useMemo(() => {
+    if (columns.length === 0) {
+      // If no columns defined, infer from first row
+      if (rows.length > 0) {
+        return Object.keys(rows[0]).map((key) => ({ field: key, headerName: key, visible: true }));
+      }
+      return [];
+    }
+    
+    // Filter columns based on visibility property
+    return columns.filter((col: any) => {
+      if (typeof col === 'string') {
+        return true; // String columns are always visible
+      }
+      // Object columns: check visible property (default to true if not specified)
+      return col.visible !== false;
+    });
+  }, [columns, rows]);
 
   // Don't render if conditional rendering says no
   if (!shouldRender) {
@@ -138,7 +161,7 @@ const FormDataGrid: React.FC<FormDataGridProps> = ({ component }) => {
             <Table size={size as any} stickyHeader={stickyHeader}>
               <TableHead>
                 <TableRow>
-                  {inferredColumns.map((col: any, index: number) => (
+                  {visibleColumns.map((col: any, index: number) => (
                     <TableCell key={index}>
                       {typeof col === 'string' ? col : col.headerName || col.field}
                     </TableCell>
@@ -148,7 +171,7 @@ const FormDataGrid: React.FC<FormDataGridProps> = ({ component }) => {
               <TableBody>
                 {rows.map((row: any, rowIndex: number) => (
                   <TableRow key={rowIndex} hover>
-                    {inferredColumns.map((col: any, colIndex: number) => {
+                    {visibleColumns.map((col: any, colIndex: number) => {
                       const field = typeof col === 'string' ? col : col.field;
                       return (
                         <TableCell key={colIndex}>

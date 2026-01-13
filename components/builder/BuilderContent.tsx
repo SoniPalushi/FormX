@@ -359,6 +359,12 @@ const BuilderContent: React.FC = () => {
           variant="persistent"
           anchor="right"
           open={rightOpen}
+          ModalProps={{
+            // Ensure the drawer doesn't block interactions
+            disableEnforceFocus: true,
+            disableAutoFocus: true,
+            disableRestoreFocus: true,
+          }}
           sx={{
             width: rightOpen ? PROPERTY_PANEL_WIDTH : 0,
             flexShrink: 0,
@@ -369,6 +375,14 @@ const BuilderContent: React.FC = () => {
               position: 'relative',
               height: '100%',
               borderLeft: '1px solid #e0e0e0',
+              // Ensure the drawer paper doesn't block interactions
+              pointerEvents: 'auto',
+              // Ensure proper z-index for interactions
+              zIndex: 1200,
+            },
+            // Ensure no backdrop interferes
+            '& .MuiBackdrop-root': {
+              display: 'none',
             },
           }}
         >

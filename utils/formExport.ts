@@ -37,8 +37,67 @@ export interface FormExport {
 }
 
 /**
- * Export form structure as JSON
- * This format can be used in other systems to render forms
+ * Clean component for export (remove builder-specific props, unwrap dependencies, fix template format)
+ */
+function cleanComponentForExport(component: ComponentDefinition): ComponentDefinition {
+  const cleaned: ComponentDefinition = {
+    id: component.id,
+    guid: component.guid,
+    name: component.name,
+    type: component.type,
+    props: {},
+    children: component.children ? component.children.map(cleanComponentForExport) : undefined,
+  };
+
+  // Clean props - remove wrapper objects and builder-specific props
+  for (const [key, value] of Object.entries(component.props || {})) {
+    // Skip builder-specific properties
+    if (key === 'isCmp' || key === 'isWa' || key === 'isNotWa' || key === 'data-triggers') {
+      continue;
+    }
+
+    // Unwrap ComponentProperty format { value: ... } to direct value
+    if (value && typeof value === 'object' && !Array.isArray(value) && 'value' in value && Object.keys(value).length === 1) {
+      cleaned.props[key] = (value as any).value;
+    } else {
+      cleaned.props[key] = value;
+    }
+  }
+
+  // Clean dependencies - unwrap if wrapped and fix template format
+  if (cleaned.props.dependencies) {
+    let deps = cleaned.props.dependencies;
+    
+    // Check if dependencies are wrapped in { value: ... }
+    if (deps && typeof deps === 'object' && 'value' in deps && Object.keys(deps).length === 1) {
+      deps = deps.value;
+      cleaned.props.dependencies = deps;
+    }
+    
+    // Fix template format - ensure curly braces for template strings
+    if (deps && typeof deps === 'object') {
+      const fixTemplate = (prop: any) => {
+        if (prop && typeof prop === 'object' && prop.type === 'template' && prop.template) {
+          // If template doesn't have curly braces, add them
+          if (!prop.template.includes('{')) {
+            prop.template = prop.template.replace(/data\.(\w+)/g, '{data.$1}');
+          }
+        }
+      };
+      
+      fixTemplate(deps.label);
+      fixTemplate(deps.placeholder);
+      fixTemplate(deps.value);
+      fixTemplate(deps.options);
+    }
+  }
+
+  return cleaned;
+}
+
+/**
+ * Export form structure as JSON (Standard React Form Builder format)
+ * This format uses direct prop values, proper IDs, and standard component types
  */
 export function exportFormStructure(
   components: ComponentDefinition[],
@@ -48,6 +107,8 @@ export function exportFormStructure(
     author?: string;
   }
 ): FormExport {
+  const cleanedComponents = components.map(cleanComponentForExport);
+  
   return {
     version: '1.0.0',
     metadata: {
@@ -55,7 +116,7 @@ export function exportFormStructure(
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     },
-    structure: components,
+    structure: cleanedComponents,
   };
 }
 
@@ -276,7 +337,40 @@ export function downloadFormJSON(
 }
 
 /**
- * Read form from JSON file with automatic migration
+ * Unwrap component props from ComponentProperty format
+ */
+function unwrapComponentProps(component: any): ComponentDefinition {
+  const unwrapped: ComponentDefinition = {
+    id: component.id || component.key,
+    guid: component.guid,
+    name: component.name,
+    type: component.type,
+    props: {},
+    children: component.children ? component.children.map(unwrapComponentProps) : undefined,
+  };
+
+  // Unwrap props from { value: ... } format
+  for (const [key, value] of Object.entries(component.props || {})) {
+    if (value && typeof value === 'object' && !Array.isArray(value) && 'value' in value && Object.keys(value).length === 1) {
+      unwrapped.props[key] = (value as any).value;
+    } else {
+      unwrapped.props[key] = value;
+    }
+  }
+
+  // Unwrap dependencies if wrapped
+  if (unwrapped.props.dependencies) {
+    const deps = unwrapped.props.dependencies;
+    if (deps && typeof deps === 'object' && 'value' in deps && Object.keys(deps).length === 1) {
+      unwrapped.props.dependencies = deps.value;
+    }
+  }
+
+  return unwrapped;
+}
+
+/**
+ * Read form from JSON file with automatic migration and format detection
  */
 export function readFormFromFile(file: File): Promise<ComponentDefinition[]> {
   return new Promise(async (resolve, reject) => {
@@ -300,18 +394,25 @@ export function readFormFromFile(file: File): Promise<ComponentDefinition[]> {
         
         const dataToImport = migrationResult.data;
         
-        // Check if it's a PersistedForm format
-        if (dataToImport.form && dataToImport.version) {
+        // Check if it's a Standard React Form Builder format (form.form.children)
+        if (dataToImport.form && dataToImport.form.children && Array.isArray(dataToImport.form.children)) {
+          const components = dataToImport.form.children.map(unwrapComponentProps);
+          resolve(components);
+        }
+        // Check if it's a PersistedForm format (with ComponentProperty wrapping)
+        else if (dataToImport.form && dataToImport.version) {
           const components = importFromPersistedForm(dataToImport as PersistedForm);
           resolve(components);
         } 
         // Check if it's a FormExport format
         else if (dataToImport.structure && Array.isArray(dataToImport.structure)) {
-          resolve(dataToImport.structure);
+          const components = dataToImport.structure.map(unwrapComponentProps);
+          resolve(components);
         }
         // Check if it's a direct array of components
-        else if (Array.isArray(dataToImport) && dataToImport.every((c: any) => c.id && c.type)) {
-          resolve(dataToImport);
+        else if (Array.isArray(dataToImport) && dataToImport.every((c: any) => (c.id || c.key) && c.type)) {
+          const components = dataToImport.map(unwrapComponentProps);
+          resolve(components);
         }
         else {
           throw new Error('Invalid form data structure');
@@ -327,7 +428,7 @@ export function readFormFromFile(file: File): Promise<ComponentDefinition[]> {
 }
 
 /**
- * Import form from JSON string with automatic migration
+ * Import form from JSON string with automatic migration and format detection
  */
 export async function importFormFromJSON(jsonString: string): Promise<ComponentDefinition[]> {
   try {
@@ -345,17 +446,21 @@ export async function importFormFromJSON(jsonString: string): Promise<ComponentD
     
     const dataToImport = migrationResult.data;
     
-    // Check if it's a PersistedForm format
+    // Check if it's a Standard React Form Builder format (form.form.children)
+    if (dataToImport.form && dataToImport.form.children && Array.isArray(dataToImport.form.children)) {
+      return dataToImport.form.children.map(unwrapComponentProps);
+    }
+    // Check if it's a PersistedForm format (with ComponentProperty wrapping)
     if (dataToImport.form && dataToImport.version) {
       return importFromPersistedForm(dataToImport as PersistedForm);
     }
     // Check if it's a FormExport format
     else if (dataToImport.structure && Array.isArray(dataToImport.structure)) {
-      return dataToImport.structure;
+      return dataToImport.structure.map(unwrapComponentProps);
     }
     // Check if it's a direct array of components
-    else if (Array.isArray(dataToImport) && dataToImport.every((c: any) => c.id && c.type)) {
-      return dataToImport;
+    else if (Array.isArray(dataToImport) && dataToImport.every((c: any) => (c.id || c.key) && c.type)) {
+      return dataToImport.map(unwrapComponentProps);
     }
     
     throw new Error('Invalid form data structure');
@@ -366,7 +471,60 @@ export async function importFormFromJSON(jsonString: string): Promise<ComponentD
 }
 
 /**
+ * Export form as Standard React Form Builder format
+ * Uses direct prop values, proper IDs (id/guid/name), and standard component types
+ */
+export function exportAsStandardFormat(
+  components: ComponentDefinition[],
+  options: {
+    version?: string;
+    metadata?: {
+      formName?: string;
+      description?: string;
+      author?: string;
+      formVersion?: string;
+    };
+    defaultLanguage?: string;
+    languages?: Array<{ code: string; name: string }>;
+  } = {}
+): any {
+  const cleanedComponents = components.map(cleanComponentForExport);
+  
+  // Create form root
+  const formRoot: ComponentDefinition = {
+    id: 'root',
+    guid: crypto.randomUUID(),
+    name: options.metadata?.formName || 'form',
+    type: 'Form',
+    props: {},
+    children: cleanedComponents,
+  };
+
+  const now = new Date().toISOString();
+
+  return {
+    version: options.version || '1',
+    metadata: {
+      formName: options.metadata?.formName || 'Untitled Form',
+      description: options.metadata?.description,
+      author: options.metadata?.author,
+      formVersion: options.metadata?.formVersion || '1.0',
+      createdAt: now,
+      updatedAt: now,
+    },
+    form: formRoot,
+    defaultLanguage: options.defaultLanguage || 'al',
+    languages: options.languages || [
+      { code: 'al', name: 'Albanian' },
+      { code: 'en-US', name: 'English (US)' },
+    ],
+    localization: {},
+  };
+}
+
+/**
  * Export form as PersistedForm format (FormEngine compatible)
+ * This is the legacy format with wrapped props and Mui prefixes
  */
 export function exportAsPersistedForm(
   components: ComponentDefinition[],
